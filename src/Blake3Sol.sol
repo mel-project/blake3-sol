@@ -4,14 +4,12 @@ pragma solidity ^0.8.6;
 //type State is uint32[16];
 //type usize is uint32;
 
-library Blake3 {
-    /*
-    uint32[8] constant IV = [
+contract Blake3Sol {
+    // This should remain constant but solidity doesn't support declaring it
+    uint8[16] MSG_PERMUTATION = [2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8];
+    uint32[8] IV = [
         0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19
     ];
-
-    uint8[16] constant MSG_PERMUTATION = [2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8];
-    */
 
 
     // Mixing function G
@@ -50,8 +48,6 @@ library Blake3 {
     }
 
     function permute(uint32[16] memory m) public {
-        uint8[16] memory MSG_PERMUTATION = [2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8];
-
         uint32[16] memory permuted;
         for (uint8 i = 0; i < 16; i++) {
             permuted[i] = m[MSG_PERMUTATION[i]];
@@ -66,10 +62,6 @@ library Blake3 {
         uint32 block_len,
         uint32 flags) public returns (uint32[16] memory)
     {
-        uint32[8] memory IV = [
-            0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19
-        ];
-
         uint32[16] memory state = [
             chaining_value[0],
             chaining_value[1],
@@ -112,8 +104,4 @@ library Blake3 {
     }
 
 
-}
-
-
-contract Blake3Sol {
 }
