@@ -3,6 +3,37 @@ pragma solidity ^0.8.6;
 
 //type State is uint32[16];
 //type usize is uint32;
+uint8 constant BLOCK_LEN = 64;
+
+// Flag constants
+uint32 constant CHUNK_START = 1 << 0;
+uint32 constant CHUNK_END = 1 << 1;
+uint32 constant PARENT = 1 << 2;
+uint32 constant ROOT = 1 << 3;
+uint32 constant KEYED_HASH = 1 << 4;
+uint32 constant DERIVE_KEY_CONTEXT = 1 << 5;
+uint32 constant DERIVE_KEY_MATERIAL = 1 << 6;
+
+
+// Product of a ChunkState before deriving chain value
+struct Output {
+    uint32[8] input_chaining_value;
+    uint32[16] block_words;
+    uint64 counter;
+    uint32 block_len;
+    uint32 flags;
+}
+
+struct ChunkState {
+    uint32[8] chaining_value;
+    uint64 chunk_counter;
+    uint8[BLOCK_LEN] block_bytes;
+    uint8 block_len;
+    uint8 blocks_compressed;
+    uint32 flags;
+}
+
+
 
 contract Blake3Sol {
     // This should remain constant but solidity doesn't support declaring it
@@ -21,7 +52,7 @@ contract Blake3Sol {
         uint32 d,
         uint32 mx,
         uint32 my)
-    public {
+    public pure {
         unchecked {
         state[a] = state[a] + state[b] + mx;
         state[d] = (state[d] ^ state[a]) * 65536;
@@ -34,7 +65,7 @@ contract Blake3Sol {
         }
     }
 
-    function round(uint32[16] memory state, uint32[16] memory m) public {
+    function round(uint32[16] memory state, uint32[16] memory m) public pure {
         // Mix the columns.
         g(state, 0, 4, 8, 12, m[0], m[1]);
         g(state, 1, 5, 9, 13, m[2], m[3]);
@@ -103,5 +134,54 @@ contract Blake3Sol {
         return state;
     }
 
+    function chaining_value(Output memory o) public returns (uint32[8] memory) {
+        uint32[16] memory compression_output = compress(
+            o.input_chaining_value,
+            o.block_words,
+            o.counter,
+            o.block_len,
+            o.flags);
 
+        // TODO there must be a way to do this without copying
+        // How to take a slice of a memory array?
+        uint32[8] memory first_8;
+        for (uint8 i = 0; i < 8; i++) {
+            first_8[i] = compression_output[i];
+        }
+
+        return first_8;
+    }
+
+
+    //
+    // Chunk state functions
+    //
+
+    function new_chunkstate(
+        uint32[8] memory key_words,
+        uint64 chunk_counter,
+        uint32 flags)
+    public view pure returns (ChunkState memory) {
+        return ChunkState({
+            chaining_value: key_words,
+            chunk_counter: chunk_counter,
+            // TODO how to initialize a fixed-size array in memory?
+            block_bytes: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            block_len: 0,
+            blocks_compressed: 0,
+            flags: flags
+        });
+    }
+
+    function len(ChunkState memory chunk) public view returns (uint32) {
+        return BLOCK_LEN * chunk.blocks_compressed + chunk.block_len;
+    }
+
+    function start_flag(ChunkState memory chunk) public view returns (uint32) {
+        if (chunk.blocks_compressed == 0) {
+            return CHUNK_START;
+        } else {
+            return 0;
+        }
+    }
 }
