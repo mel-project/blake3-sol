@@ -29,7 +29,7 @@ struct ChunkState {
     uint64 chunk_counter;
     //uint8[BLOCK_LEN] block_bytes;
     bytes[BLOCK_LEN] block_bytes;
-    uint8 block_len;
+    uint32 block_len;
     uint8 blocks_compressed;
     uint32 flags;
 }
@@ -146,14 +146,32 @@ contract Blake3Sol {
         return first_8_words(compression_output);
     }
 
+    function toUint32(bytes[BLOCK_LEN] memory _bytes, uint256 _start) internal pure returns (uint32) {
+        require(_bytes.length >= _start + 4, "toUint32_outOfBounds");
+        uint32 tempUint;
+
+        assembly {
+            tempUint := mload(add(add(_bytes, 0x4), _start))
+        }
+
+        return tempUint;
+    }
+
     function words_from_little_endian_bytes(
-        //uint8[] calldata data_bytes,
-        bytes calldata data_bytes,
-        uint32[] memory words) public {
+        bytes[BLOCK_LEN] memory data_bytes,
+        uint32[16] memory words) public {
         for (uint8 i = 0; i < data_bytes.length; i++) {
-            //words[i] = uint32(bytes_to_uint256(data_bytes[i*4 : i*4+4]));
-            // TODO is this little-endian?
-            words[i] = uint32(bytes4(data_bytes[i*4 : i*4+4]));
+            // TODO Little-endian?
+            //words[i] = uint32(bytes4(data_bytes[i*4 : i*4+4]));
+            words[i] = toUint32(data_bytes, 0);
+            /*
+            uint32 word = 0;
+            word += data_bytes[i*4];
+            word += data_bytes[i*4+1] * 2;
+            word += data_bytes[i*4+2] * 4;
+            word += data_bytes[i*4+3] * 8;
+            words[i] = word;
+            */
         }
     }
 
@@ -190,15 +208,12 @@ contract Blake3Sol {
         uint64 chunk_counter,
         uint32 flags)
     public view returns (ChunkState memory) {
+        bytes[64] memory block_bytes;
+
         return ChunkState({
             chaining_value: key_words,
             chunk_counter: chunk_counter,
-            // TODO how to initialize a fixed-size array in memory?
-            //block_bytes: [bytes1(0),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-            block_bytes: //bytes([uint256(0), 0]),
-                bytes('\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'),
-            //block_bytes:
-                //0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000,
+            block_bytes: block_bytes,
             block_len: 0,
             blocks_compressed: 0,
             flags: flags
@@ -229,18 +244,19 @@ contract Blake3Sol {
             // If the block buffer is full, compress it and clear it. More
             // input is coming, so this compression is not CHUNK_END.
             if (chunk.block_len == BLOCK_LEN) {
-                uint32[16] memory block_words = [uint32(0),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+                uint32[16] memory block_words;// = [uint32(0),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
                 words_from_little_endian_bytes(chunk.block_bytes, block_words);
                 chunk.chaining_value = first_8_words(compress(
                     chunk.chaining_value,
                     block_words,
                     chunk.chunk_counter,
                     BLOCK_LEN,
-                    chunk.flags | chunk.start_flag()
+                    chunk.flags | start_flag(chunk)
                 ));
                 chunk.blocks_compressed += 1;
-                chunk.block_bytes =
-                    [uint32(0),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+                // TODO probably cheaper to zero-out byte array than to reallocate
+                bytes[64] memory block_bytes;
+                chunk.block_bytes = block_bytes;
                 chunk.block_len = 0;
             }
 
@@ -251,13 +267,18 @@ contract Blake3Sol {
             if (want < input.length) {
                 take = want;
             } else {
-                take = input.length;
+                // TODO be more careful with this downcast
+                take = uint32(input.length);
             }
 
             //chunk.block_bytes[self.block_len as usize..][..take].copy_from_slice(&input[..take]);
+            bytes memory inp_bytes = input[input_offset:input_offset+take];
             for (uint32 i = 0; i < take; i++) {
                 // TODO recheck this logic
-                chunk.block_bytes[i+chunk.block_len] = input[input_offset+i];
+                //bytes1 b = input[input_offset+i];
+                //chunk.block_bytes[i+chunk.block_len] = b;
+                    //input[input_offset+i];
+                chunk.block_bytes[i+chunk.block_len] = inp_bytes[i];
             }
 
             chunk.block_len += take;
