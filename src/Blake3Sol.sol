@@ -29,9 +29,17 @@ struct ChunkState {
     uint64 chunk_counter;
     // Has a max size of BLOCK_LEN
     bytes block_bytes;
-    //uint8[BLOCK_LEN] block_bytes;
     uint32 block_len;
     uint8 blocks_compressed;
+    uint32 flags;
+}
+
+// An incremental hasher that can accept any number of writes.
+struct Hasher {
+    ChunkState chunk_state;
+    uint32[8] key_words;
+    uint32[54][8] cv_stack; // Space for 54 subtree chaining values:
+    uint8 cv_stack_len;     // 2^54 * CHUNK_LEN = 2^64
     uint32 flags;
 }
 
@@ -236,7 +244,6 @@ contract Blake3Sol {
     // Returns a new input offset
     function update(
         ChunkState memory chunk,
-        //uint8[] calldata input,
         bytes calldata input,
         uint32 input_offset
     )
@@ -245,7 +252,7 @@ contract Blake3Sol {
             // If the block buffer is full, compress it and clear it. More
             // input is coming, so this compression is not CHUNK_END.
             if (chunk.block_len == BLOCK_LEN) {
-                uint32[16] memory block_words;// = [uint32(0),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+                uint32[16] memory block_words;
                 words_from_little_endian_bytes(chunk.block_bytes, block_words);
                 chunk.chaining_value = first_8_words(compress(
                     chunk.chaining_value,
@@ -256,7 +263,6 @@ contract Blake3Sol {
                 ));
                 chunk.blocks_compressed += 1;
                 // TODO probably cheaper to zero-out byte array than to reallocate
-                //uint8[BLOCK_LEN] memory block_bytes;
                 bytes memory block_bytes;
                 chunk.block_bytes = block_bytes;
                 chunk.block_len = 0;
@@ -276,13 +282,61 @@ contract Blake3Sol {
             //chunk.block_bytes[self.block_len as usize..][..take].copy_from_slice(&input[..take]);
             for (uint32 i = 0; i < take; i++) {
                 // TODO recheck this logic
-                //bytes1 b = input[input_offset+i];
                 chunk.block_bytes[i+chunk.block_len] = input[input_offset+i];
             }
 
             chunk.block_len += take;
             return input_offset + take;
         }
+    }
+
+    function output(ChunkState memory chunk) public returns (Output memory) {
+        uint32[16] memory block_words;
+        words_from_little_endian_bytes(chunk.block_bytes, block_words);
+
+        return Output({
+            input_chaining_value: chunk.chaining_value,
+            block_words: block_words,
+            counter: chunk.chunk_counter,
+            block_len: chunk.block_len,
+            flags: chunk.flags | start_flag(chunk) | CHUNK_END
+        });
+    }
+
+    //
+    // Parent functions
+    //
+
+    function parent_output(
+        uint32[8] memory left_child_cv,
+        uint32[8] memory right_child_cv,
+        uint32[8] memory key_words,
+        uint32 flags
+    ) public returns (Output memory) {
+        uint32[16] memory block_words;
+        for (uint8 i = 0; i < 8; i++) {
+            block_words[i] = left_child_cv[i];
+        }
+        for (uint8 i = 8; i < 16; i++) {
+            block_words[i] = right_child_cv[i];
+        }
+
+        return Output({
+            input_chaining_value: key_words,
+            block_words: block_words,
+            counter: 0,           // Always 0 for parent nodes.
+            block_len: BLOCK_LEN, // Always BLOCK_LEN (64) for parent nodes.
+            flags: PARENT | flags
+        });
+    }
+
+    function parent_cv(
+        uint32[8] memory left_child_cv,
+        uint32[8] memory right_child_cv,
+        uint32[8] memory key_words,
+        uint32 flags
+    ) public returns (uint32[8] memory) {
+        return chaining_value(parent_output(left_child_cv, right_child_cv, key_words, flags));
     }
 
 }
