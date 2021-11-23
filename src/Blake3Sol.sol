@@ -27,7 +27,8 @@ struct Output {
 struct ChunkState {
     uint32[8] chaining_value;
     uint64 chunk_counter;
-    uint8[BLOCK_LEN] block_bytes;
+    //uint8[BLOCK_LEN] block_bytes;
+    bytes[BLOCK_LEN] block_bytes;
     uint8 block_len;
     uint8 blocks_compressed;
     uint32 flags;
@@ -142,11 +143,38 @@ contract Blake3Sol {
             o.block_len,
             o.flags);
 
+        return first_8_words(compression_output);
+    }
+
+    function words_from_little_endian_bytes(
+        //uint8[] calldata data_bytes,
+        bytes calldata data_bytes,
+        uint32[] memory words) public {
+        for (uint8 i = 0; i < data_bytes.length; i++) {
+            //words[i] = uint32(bytes_to_uint256(data_bytes[i*4 : i*4+4]));
+            // TODO is this little-endian?
+            words[i] = uint32(bytes4(data_bytes[i*4 : i*4+4]));
+        }
+    }
+
+    // Seems this explicit conversion is necessary because solidity can't infer size in a slice
+    /*
+    function bytes_to_uint256(bytes calldata b) public returns (uint256) {
+        uint256 number;
+        for(uint i=0;i<b.length;i++){
+            number = number + uint8(b[i])*(2**(8*(b.length-(i+1))));
+        }
+        return number;
+    }
+    */
+
+    // TODO I wish this didn't require a copy to convert array sizes
+    function first_8_words(uint32[16] memory words) public view returns (uint32[8] memory) {
         // TODO there must be a way to do this without copying
         // How to take a slice of a memory array?
         uint32[8] memory first_8;
         for (uint8 i = 0; i < 8; i++) {
-            first_8[i] = compression_output[i];
+            first_8[i] = words[i];
         }
 
         return first_8;
@@ -161,12 +189,16 @@ contract Blake3Sol {
         uint32[8] memory key_words,
         uint64 chunk_counter,
         uint32 flags)
-    public view pure returns (ChunkState memory) {
+    public view returns (ChunkState memory) {
         return ChunkState({
             chaining_value: key_words,
             chunk_counter: chunk_counter,
             // TODO how to initialize a fixed-size array in memory?
-            block_bytes: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            //block_bytes: [bytes1(0),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            block_bytes: //bytes([uint256(0), 0]),
+                bytes('\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'),
+            //block_bytes:
+                //0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000,
             block_len: 0,
             blocks_compressed: 0,
             flags: flags
@@ -184,4 +216,53 @@ contract Blake3Sol {
             return 0;
         }
     }
+
+    // Returns a new input offset
+    function update(
+        ChunkState memory chunk,
+        //uint8[] calldata input,
+        bytes calldata input,
+        uint32 input_offset
+    )
+    public returns (uint32) {
+        while (input_offset < input.length) {
+            // If the block buffer is full, compress it and clear it. More
+            // input is coming, so this compression is not CHUNK_END.
+            if (chunk.block_len == BLOCK_LEN) {
+                uint32[16] memory block_words = [uint32(0),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+                words_from_little_endian_bytes(chunk.block_bytes, block_words);
+                chunk.chaining_value = first_8_words(compress(
+                    chunk.chaining_value,
+                    block_words,
+                    chunk.chunk_counter,
+                    BLOCK_LEN,
+                    chunk.flags | chunk.start_flag()
+                ));
+                chunk.blocks_compressed += 1;
+                chunk.block_bytes =
+                    [uint32(0),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+                chunk.block_len = 0;
+            }
+
+            // Copy input bytes into the block buffer.
+            uint32 want = BLOCK_LEN - chunk.block_len;
+            // take = min(want, input.length);
+            uint32 take;
+            if (want < input.length) {
+                take = want;
+            } else {
+                take = input.length;
+            }
+
+            //chunk.block_bytes[self.block_len as usize..][..take].copy_from_slice(&input[..take]);
+            for (uint32 i = 0; i < take; i++) {
+                // TODO recheck this logic
+                chunk.block_bytes[i+chunk.block_len] = input[input_offset+i];
+            }
+
+            chunk.block_len += take;
+            return input_offset + take;
+        }
+    }
+
 }
