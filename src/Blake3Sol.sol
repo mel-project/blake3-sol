@@ -166,21 +166,21 @@ contract Blake3Sol {
         return tempUint;
     }
 
+    function words_from_little_endian_bytes8(
+        bytes memory data_bytes,
+        uint32[8] memory words) public {
+        for (uint8 i = 0; i < data_bytes.length/4; i++) {
+            // TODO Little-endian?
+            words[i] = toUint32(data_bytes, i*4);
+        }
+    }
+
     function words_from_little_endian_bytes(
         bytes memory data_bytes,
         uint32[16] memory words) public {
         for (uint8 i = 0; i < data_bytes.length/4; i++) {
             // TODO Little-endian?
-            //words[i] = uint32(bytes4(data_bytes[i*4 : i*4+4]));
             words[i] = toUint32(data_bytes, i*4);
-            /*
-            uint32 word = 0;
-            word += data_bytes[i*4];
-            word += data_bytes[i*4+1] * 2;
-            word += data_bytes[i*4+2] * 4;
-            word += data_bytes[i*4+3] * 8;
-            words[i] = word;
-            */
         }
     }
 
@@ -337,6 +337,36 @@ contract Blake3Sol {
         uint32 flags
     ) public returns (uint32[8] memory) {
         return chaining_value(parent_output(left_child_cv, right_child_cv, key_words, flags));
+    }
+
+
+    //
+    // Hasher functions
+    //
+
+    function new_hasher_internal(uint32[8] memory key_words, uint32 flags)
+    private returns (Hasher memory) {
+        uint32[54][8] memory cv_stack;
+        return Hasher({
+            chunk_state: new_chunkstate(key_words, 0, flags),
+            key_words: key_words,
+            cv_stack: cv_stack,
+            cv_stack_len: 0,
+            flags: flags
+        });
+    }
+
+    /// Construct a new `Hasher` for the regular hash function.
+    function new_hasher() public returns (Hasher memory) {
+        return new_hasher_internal(IV, 0);
+    }
+
+    /// Construct a new `Hasher` for the keyed hash function.
+    function new_keyed(bytes calldata key) public returns (Hasher memory) {
+        uint32[8] memory key_words;
+        bytes memory key_mem = key;
+        words_from_little_endian_bytes8(key_mem, key_words);
+        return new_hasher_internal(key_words, KEYED_HASH);
     }
 
 }
