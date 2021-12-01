@@ -162,9 +162,7 @@ contract Blake3Sol {
         bytes memory out_slice) private
     {
         uint32 output_block_counter = 0;
-        uint32 out_slice_counter = 0;
         for (uint32 i = 0; i < out_slice.length; i += 2 * OUT_LEN) {
-        //for out_block in out_slice.chunks_mut(2 * OUT_LEN) {
             uint32[16] memory words = compress(
                 self.input_chaining_value,
                 self.block_words,
@@ -172,40 +170,12 @@ contract Blake3Sol {
                 self.block_len,
                 self.flags | ROOT
             );
-            //bytes memory out_block;// = out_slice[i:i+2*OUT_LEN];
             // The output length might not be a multiple of 4.
-            for (uint32 j = 0; j < words.length && out_slice.length < 32 * j; j++) {
+            for (uint32 j = 0; j < words.length && out_slice.length > j*4; j++) {
                 // Load word at j into out_slice as little endian
                 load_uint32_to_le_bytes(words[j], out_slice, j*4);
-
-                /*
-                // Get little endian bytes
-                for (uint8 k = 0; k < 4; k++) {
-                    // TODO Check this logic
-                    //out_slice[j*32 + k] = (words[j] / (8*k)) ^ 4294967295;
-                    //out_slice[j*4 + k] = bytes1(words[j]);
-
-                    // This is big endian
-                    assembly {
-                        mstore8(out_slice[j*4 + k], add(words, add(j, k)))
-                    }
-                }
-                */
-                // TODO Little endian
-                /*
-                bytes32 buf;
-                words_from_little_endian_bytes(words[j], buf);
-
-                for (uint8 k = 0; k < 32; k++) {
-                    out_slice[k] = buf[k];
-                }
-                */
             }
-            /*
-            for (word, out_word) in words.iter().zip(out_block.chunks_mut(4)) {
-                out_word.copy_from_slice(&word.to_le_bytes()[..out_word.len()]);
-            }
-            */
+
             output_block_counter += 1;
         }
     }
@@ -335,7 +305,7 @@ contract Blake3Sol {
         uint32 input_offset
     )
     public returns (uint32) {
-        while (input_offset < input.length) {
+        while (input_offset <= input.length) {
             // If the block buffer is full, compress it and clear it. More
             // input is coming, so this compression is not CHUNK_END.
             if (chunk.block_len == BLOCK_LEN) {
@@ -350,30 +320,41 @@ contract Blake3Sol {
                 ));
                 chunk.blocks_compressed += 1;
                 // TODO probably cheaper to zero-out byte array than to reallocate
-                bytes memory block_bytes;
+                bytes memory block_bytes = new bytes(BLOCK_LEN);
                 chunk.block_bytes = block_bytes;
                 chunk.block_len = 0;
             }
 
-            // Copy input bytes into the block buffer.
+            // Take enough to fill a block [min(want, input.length)]
             uint32 want = BLOCK_LEN - chunk.block_len;
-            // take = min(want, input.length);
-            uint32 take;
-            if (want < input.length) {
-                take = want;
-            } else {
-                // TODO be more careful with this downcast
-                take = uint32(input.length);
-            }
+            // TODO be more careful with this downcast
+            uint32 take = min(want, uint32(input.length));
 
+            // Copy bytes from input to chunk block
             //chunk.block_bytes[self.block_len as usize..][..take].copy_from_slice(&input[..take]);
+            /*
             for (uint32 i = 0; i < take; i++) {
                 // TODO recheck this logic
                 chunk.block_bytes[i+chunk.block_len] = input[input_offset+i];
             }
+            */
+           bytes memory block_ref = chunk.block_bytes;
+            assembly {
+                let block_addr := add(block_ref, 0x20)
+                let input_addr := add(add(input.offset, 0x20), input_offset)
+                calldatacopy(block_addr, input_addr, take)
+            }
 
             chunk.block_len += take;
             return input_offset + take;
+        }
+    }
+
+    function min(uint32 x, uint32 y) private returns (uint32) {
+        if (x < y) {
+            return x;
+        } else {
+            return y;
         }
     }
 
@@ -521,9 +502,9 @@ contract Blake3Sol {
 
             // Update chunk state
             bytes calldata input_slice = input[input_offset:take+input_offset];
-            update_chunkstate(self.chunk_state, input_slice, input_offset);
+            input_offset = update_chunkstate(self.chunk_state, input_slice, input_offset);
 
-            input_offset += take;
+            //input_offset += take;
         }
     }
 

@@ -12,6 +12,14 @@ contract Blake3SolTest is DSTest {
         sol = new Blake3Sol();
     }
 
+    function test_hash() public {
+        Hasher memory hasher = sol.new_hasher();
+        sol.update_hasher(hasher, "hellohello?");
+        bytes memory output;
+        sol.finalize(hasher, output);
+        assertEq(string(output), "hi");
+    }
+
     function testFail_basic_sanity() public {
         assertTrue(false);
     }
