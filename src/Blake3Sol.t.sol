@@ -15,6 +15,8 @@ contract Blake3SolTest is DSTest {
     function test_hash() public {
         Hasher memory hasher = sol.new_hasher();
         sol.update_hasher(hasher, "hellohello?");
+        assertEq(string(hasher.chunk_state.block_bytes), "oye");
+
         bytes memory output;
         sol.finalize(hasher, output);
         assertEq(string(output), "hi");

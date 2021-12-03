@@ -217,7 +217,13 @@ contract Blake3Sol {
         uint32 tempUint;
 
         assembly {
-            tempUint := mload(add(add(_bytes, 0x4), _start))
+            // TODO why is this 0x4 in the bytes library???
+            //tempUint := mload(add(add(_bytes, 0x4), _start))
+
+            // Load 32 bytes from array (u256)
+            tempUint := mload(add(add(_bytes, 0x20), _start))
+            // Keep just the first 4 bytes (u32)
+            tempUint := xor(tempUint, 0x00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
         }
 
         return tempUint;
@@ -225,7 +231,11 @@ contract Blake3Sol {
 
     function words_from_little_endian_bytes8(
         bytes memory data_bytes,
-        uint32[8] memory words) public {
+        uint32[8] memory words)
+    public {
+        require(data_bytes.length <= 4*8,
+                "Data bytes is too long to convert to 8 4-byte words");
+
         for (uint8 i = 0; i < data_bytes.length/4; i++) {
             // TODO Little-endian?
             words[i] = toUint32(data_bytes, i*4);
@@ -234,7 +244,11 @@ contract Blake3Sol {
 
     function words_from_little_endian_bytes(
         bytes memory data_bytes,
-        uint32[16] memory words) public {
+        uint32[16] memory words)
+    public {
+        require(data_bytes.length <= 4*16,
+                "Data bytes is too long to convert to 16 4-byte words");
+
         for (uint8 i = 0; i < data_bytes.length/4; i++) {
             // TODO Little-endian?
             words[i] = toUint32(data_bytes, i*4);
@@ -301,10 +315,11 @@ contract Blake3Sol {
     // Returns a new input offset
     function update_chunkstate(
         ChunkState memory chunk,
-        bytes calldata input,
-        uint32 input_offset
+        bytes calldata input
+        //uint32 input_offset
     )
     public returns (uint32) {
+        uint32 input_offset = 0;
         while (input_offset <= input.length) {
             // If the block buffer is full, compress it and clear it. More
             // input is coming, so this compression is not CHUNK_END.
@@ -332,21 +347,22 @@ contract Blake3Sol {
 
             // Copy bytes from input to chunk block
             //chunk.block_bytes[self.block_len as usize..][..take].copy_from_slice(&input[..take]);
-            /*
             for (uint32 i = 0; i < take; i++) {
                 // TODO recheck this logic
                 chunk.block_bytes[i+chunk.block_len] = input[input_offset+i];
             }
-            */
-           bytes memory block_ref = chunk.block_bytes;
+            /*
+            bytes memory block_ref = chunk.block_bytes;
+            uint32 blen = chunk.block_len;
             assembly {
-                let block_addr := add(block_ref, 0x20)
+                let block_addr := add(add(block_ref, 0x20), blen)
                 let input_addr := add(add(input.offset, 0x20), input_offset)
                 calldatacopy(block_addr, input_addr, take)
             }
+            */
 
             chunk.block_len += take;
-            return input_offset + take;
+            input_offset += take;
         }
     }
 
@@ -490,21 +506,13 @@ contract Blake3Sol {
 
             // Compress input bytes into the current chunk state.
             uint32 want = CHUNK_LEN - len(self.chunk_state);
-
-            // take = min(want, input.length);
-            uint32 take;
-            if (want < input.length) {
-                take = want;
-            } else {
-                // TODO be more careful with this downcast
-                take = uint32(input.length);
-            }
+            uint32 take = min(want, uint32(input.length));
 
             // Update chunk state
             bytes calldata input_slice = input[input_offset:take+input_offset];
-            input_offset = update_chunkstate(self.chunk_state, input_slice, input_offset);
+            update_chunkstate(self.chunk_state, input_slice);
 
-            //input_offset += take;
+            input_offset += take;
         }
     }
 
