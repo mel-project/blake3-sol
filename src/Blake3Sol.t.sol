@@ -16,7 +16,7 @@ contract Blake3SolTest is DSTest {
         Hasher memory hasher = sol.new_hasher();
 
         Hasher memory hasher1 = sol.update_hasher(hasher, unicode"hellohello?");
-        //assertEq(bytes32(hasher1.chunk_state.block_bytes), bytes32("oye"));
+        assertEq(bytes32(hasher1.chunk_state.block_bytes), bytes32("oye"));
 
         bytes memory output = sol.finalize(hasher1);
         assertEq(bytes32(output),

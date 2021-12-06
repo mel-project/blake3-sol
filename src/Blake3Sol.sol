@@ -226,7 +226,7 @@ contract Blake3Sol {
             // Load 32 bytes from array (u256)
             tempUint := mload(add(add(_bytes, 0x20), _start))
             // Keep just the first 4 bytes (u32)
-            tempUint := xor(tempUint, 0x00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
+            tempUint := xor(tempUint, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000)
         }
 
         return tempUint;
@@ -252,9 +252,9 @@ contract Blake3Sol {
         require(data_bytes.length <= 4*16,
                 "Data bytes is too long to convert to 16 4-byte words");
 
-        for (uint8 i = 0; i < data_bytes.length/4; i++) {
+        for (uint8 i = 0; i < data_bytes.length; i+=4) {
             // TODO Little-endian?
-            words[i] = toUint32(data_bytes, i*4);
+            words[i] = toUint32(data_bytes, i);
         }
     }
 
@@ -351,8 +351,7 @@ contract Blake3Sol {
                 // TODO recheck this logic
                 chunk.block_bytes[i+chunk.block_len] = input[input_offset+i];
             }
-            emit LogLen(chunk.block_bytes.length);
-            /*
+           /*
             bytes memory block_ref = chunk.block_bytes;
             uint32 blen = chunk.block_len;
             assembly {
