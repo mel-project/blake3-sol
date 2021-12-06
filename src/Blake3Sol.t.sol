@@ -14,12 +14,13 @@ contract Blake3SolTest is DSTest {
 
     function test_hash() public {
         Hasher memory hasher = sol.new_hasher();
-        sol.update_hasher(hasher, "hellohello?");
-        assertEq(string(hasher.chunk_state.block_bytes), "oye");
 
-        bytes memory output;
-        sol.finalize(hasher, output);
-        assertEq(string(output), "hi");
+        Hasher memory hasher1 = sol.update_hasher(hasher, unicode"hellohello?");
+        //assertEq(bytes32(hasher1.chunk_state.block_bytes), bytes32("oye"));
+
+        bytes memory output = sol.finalize(hasher1);
+        assertEq(bytes32(output),
+                 0x10e6acb2cfcc4bb07588ad5b8e85f6a13f19e24f3302826effd93ce1ebbece6e);
     }
 
     function testFail_basic_sanity() public {

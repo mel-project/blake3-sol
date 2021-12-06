@@ -54,6 +54,9 @@ contract Blake3Sol {
         0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19
     ];
 
+    event LogBytes(bytes a);
+    event LogLen(uint256 a);
+
 
     // Mixing function G
     function g(
@@ -162,7 +165,7 @@ contract Blake3Sol {
         bytes memory out_slice) private
     {
         uint32 output_block_counter = 0;
-        for (uint32 i = 0; i < out_slice.length; i += 2 * OUT_LEN) {
+        for (uint32 i = 0; i < out_slice.length/4; i += 2 * OUT_LEN) {
             uint32[16] memory words = compress(
                 self.input_chaining_value,
                 self.block_words,
@@ -288,8 +291,7 @@ contract Blake3Sol {
         uint64 chunk_counter,
         uint32 flags)
     public view returns (ChunkState memory) {
-        //uint8[BLOCK_LEN] memory block_bytes;
-        bytes memory block_bytes;
+        bytes memory block_bytes = new bytes(BLOCK_LEN);
         return ChunkState({
             chaining_value: key_words,
             chunk_counter: chunk_counter,
@@ -316,11 +318,10 @@ contract Blake3Sol {
     function update_chunkstate(
         ChunkState memory chunk,
         bytes calldata input
-        //uint32 input_offset
     )
     public returns (uint32) {
         uint32 input_offset = 0;
-        while (input_offset <= input.length) {
+        while (input_offset < input.length) {
             // If the block buffer is full, compress it and clear it. More
             // input is coming, so this compression is not CHUNK_END.
             if (chunk.block_len == BLOCK_LEN) {
@@ -335,8 +336,7 @@ contract Blake3Sol {
                 ));
                 chunk.blocks_compressed += 1;
                 // TODO probably cheaper to zero-out byte array than to reallocate
-                bytes memory block_bytes = new bytes(BLOCK_LEN);
-                chunk.block_bytes = block_bytes;
+                chunk.block_bytes = new bytes(BLOCK_LEN);
                 chunk.block_len = 0;
             }
 
@@ -351,6 +351,7 @@ contract Blake3Sol {
                 // TODO recheck this logic
                 chunk.block_bytes[i+chunk.block_len] = input[input_offset+i];
             }
+            emit LogLen(chunk.block_bytes.length);
             /*
             bytes memory block_ref = chunk.block_bytes;
             uint32 blen = chunk.block_len;
@@ -459,8 +460,8 @@ contract Blake3Sol {
         Hasher memory context_hasher = new_hasher_internal(IV, DERIVE_KEY_CONTEXT);
         update_hasher(context_hasher, context);
 
-        bytes memory context_key;
-        finalize(context_hasher, context_key);
+        bytes memory context_key = new bytes(4 * 16);
+        finalize_internal(context_hasher, context_key);
 
         uint32[8] memory context_key_words;
         words_from_little_endian_bytes8(context_key, context_key_words);
@@ -491,8 +492,8 @@ contract Blake3Sol {
     }
 
     /// Add input to the hash state. This can be called any number of times.
-    function update_hasher(Hasher memory self, bytes calldata input) public {
-        //while !input.is_empty() {
+    function update_hasher(Hasher memory self, bytes calldata input)
+    public returns (Hasher memory) {
         uint32 input_offset = 0;
         while (input_offset < input.length) {
             // If the current chunk is complete, finalize it and reset the
@@ -514,9 +515,18 @@ contract Blake3Sol {
 
             input_offset += take;
         }
+
+        return self;
     }
 
-    function finalize(Hasher memory self, bytes memory out_slice) public {
+    function finalize(Hasher memory self)
+    public returns (bytes memory) {
+        bytes memory output = new bytes(256);
+        finalize_internal(self, output);
+        return output;
+    }
+
+    function finalize_internal(Hasher memory self, bytes memory out_slice) public {
         // Starting with the Output from the current chunk, compute all the
         // parent chaining values along the right edge of the tree, until we
         // have the root Output.
@@ -533,6 +543,4 @@ contract Blake3Sol {
         }
         root_output_bytes(output, out_slice);
     }
-
-
 }
