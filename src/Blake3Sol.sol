@@ -54,10 +54,6 @@ contract Blake3Sol {
         0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19
     ];
 
-    event LogBytes(bytes a);
-    event LogLen(uint256 a);
-
-
     // Mixing function G
     function g(
         uint32[16] memory state,
@@ -165,7 +161,8 @@ contract Blake3Sol {
         bytes memory out_slice) private
     {
         uint32 output_block_counter = 0;
-        for (uint32 i = 0; i < out_slice.length/4; i += 2 * OUT_LEN) {
+        // Take 64-byte chunks at a time from out_slice
+        for (uint32 i = 0; i < out_slice.length; i += 2 * OUT_LEN) {
             uint32[16] memory words = compress(
                 self.input_chaining_value,
                 self.block_words,
@@ -173,10 +170,11 @@ contract Blake3Sol {
                 self.block_len,
                 self.flags | ROOT
             );
+            // Load compressed words into out_slice (4 bytes at a time)
             // The output length might not be a multiple of 4.
             for (uint32 j = 0; j < words.length && out_slice.length > j*4; j++) {
                 // Load word at j into out_slice as little endian
-                load_uint32_to_le_bytes(words[j], out_slice, j*4);
+                load_uint32_to_le_bytes(words[j], out_slice, i+j*4);
             }
 
             output_block_counter += 1;
@@ -215,10 +213,15 @@ contract Blake3Sol {
     }
 
 
-    function toUint32(bytes memory _bytes, uint256 _start) internal pure returns (uint32) {
-        require(_bytes.length >= _start + 4, "toUint32_outOfBounds");
+    function le_bytes_get_uint32(bytes memory _bytes, uint256 _start) internal pure returns (uint32) {
+        require(_bytes.length >= _start + 4, "le_bytes_get_uint32_outOfBounds");
         uint32 tempUint;
 
+        for (uint8 i = 0; i < 4; i++) {
+            //tempUint += uint32(uint8(_bytes[i]) * (2 ** (8*i)));
+            tempUint += uint32(bytes4(_bytes[3-i]) >> (8 * i));
+        }
+        /*
         assembly {
             // TODO why is this 0x4 in the bytes library???
             //tempUint := mload(add(add(_bytes, 0x4), _start))
@@ -226,8 +229,10 @@ contract Blake3Sol {
             // Load 32 bytes from array (u256)
             tempUint := mload(add(add(_bytes, 0x20), _start))
             // Keep just the first 4 bytes (u32)
-            tempUint := xor(tempUint, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000)
+            //tempUint := xor(tempUint, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000)
+            tempUint := xor(tempUint, 0x00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
         }
+        */
 
         return tempUint;
     }
@@ -241,7 +246,7 @@ contract Blake3Sol {
 
         for (uint8 i = 0; i < data_bytes.length/4; i++) {
             // TODO Little-endian?
-            words[i] = toUint32(data_bytes, i*4);
+            words[i] = le_bytes_get_uint32(data_bytes, i*4);
         }
     }
 
@@ -249,12 +254,13 @@ contract Blake3Sol {
         bytes memory data_bytes,
         uint32[16] memory words)
     public {
-        require(data_bytes.length <= 4*16,
+        //require(data_bytes.length <= 64 && data_bytes.length/4 == 0,
+        require(data_bytes.length <= 64 && data_bytes.length%4 == 0,
                 "Data bytes is too long to convert to 16 4-byte words");
 
-        for (uint8 i = 0; i < data_bytes.length; i+=4) {
+        for (uint8 i = 0; i < data_bytes.length/4; i++) {
             // TODO Little-endian?
-            words[i] = toUint32(data_bytes, i);
+            words[i] = le_bytes_get_uint32(data_bytes, i*4);
         }
     }
 
@@ -343,7 +349,7 @@ contract Blake3Sol {
             // Take enough to fill a block [min(want, input.length)]
             uint32 want = BLOCK_LEN - chunk.block_len;
             // TODO be more careful with this downcast
-            uint32 take = min(want, uint32(input.length));
+            uint32 take = min(want, uint32(input.length - input_offset));
 
             // Copy bytes from input to chunk block
             //chunk.block_bytes[self.block_len as usize..][..take].copy_from_slice(&input[..take]);
@@ -459,7 +465,7 @@ contract Blake3Sol {
         Hasher memory context_hasher = new_hasher_internal(IV, DERIVE_KEY_CONTEXT);
         update_hasher(context_hasher, context);
 
-        bytes memory context_key = new bytes(4 * 16);
+        bytes memory context_key = new bytes(256);
         finalize_internal(context_hasher, context_key);
 
         uint32[8] memory context_key_words;
