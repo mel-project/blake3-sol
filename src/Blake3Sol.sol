@@ -63,20 +63,30 @@ contract Blake3Sol {
         uint32 d,
         uint32 mx,
         uint32 my)
-    public pure {
+    public {
         unchecked {
         state[a] = state[a] + state[b] + mx;
-        state[d] = (state[d] ^ state[a]) * 65536;
+        //state[d] = (state[d] ^ state[a]) / 65536;
+        state[d] = rotr(state[d] ^ state[a], 16);
         state[c] = state[c] + state[d];
-        state[b] = (state[b] ^ state[c]) * 4096;
+        //state[b] = (state[b] ^ state[c]) / 4096;
+        state[b] = rotr(state[b] ^ state[c], 12);
         state[a] = state[a] + state[b] + my;
-        state[d] = (state[d] ^ state[a]) * 256;
+        //state[d] = (state[d] ^ state[a]) / 256;
+        state[d] = rotr(state[d] ^ state[a], 8);
         state[c] = state[c] + state[d];
-        state[b] = (state[b] ^ state[c]) * 128;
+        //state[b] = (state[b] ^ state[c]) / 128;
+        state[b] = rotr(state[b] ^ state[c], 7);
         }
     }
 
-    function round(uint32[16] memory state, uint32[16] memory m) public pure {
+    function round_ext(uint32[16] memory state, uint32[16] memory m) public
+    returns (uint32[16] memory) {
+        round(state, m);
+        return state;
+    }
+
+    function round(uint32[16] memory state, uint32[16] memory m) public {
         // Mix the columns.
         g(state, 0, 4, 8, 12, m[0], m[1]);
         g(state, 1, 5, 9, 13, m[2], m[3]);
@@ -145,6 +155,16 @@ contract Blake3Sol {
         return state;
     }
 
+    function rotr(uint32 x, uint8 n) private returns (uint32) {
+        /*
+        uint32 res;
+        unchecked {
+            res = bytes4(x / div_n);
+            */
+        bytes4 b = bytes4(x);
+        return uint32((b >> n) | (b << (32 - n)));
+    }
+
     function chaining_value(Output memory o) public returns (uint32[8] memory) {
         uint32[16] memory compression_output = compress(
             o.input_chaining_value,
@@ -160,25 +180,28 @@ contract Blake3Sol {
         Output memory self,
         bytes memory out_slice) private
     {
-        uint32 output_block_counter = 0;
+        //uint32 output_block_counter = 0;
         // Take 64-byte chunks at a time from out_slice
-        for (uint32 i = 0; i < out_slice.length; i += 2 * OUT_LEN) {
+        //for (uint32 i = 0; i < out_slice.length; i += 2 * OUT_LEN) {
             uint32[16] memory words = compress(
                 self.input_chaining_value,
                 self.block_words,
-                output_block_counter,
+                0,
+                //output_block_counter,
                 self.block_len,
                 self.flags | ROOT
             );
             // Load compressed words into out_slice (4 bytes at a time)
             // The output length might not be a multiple of 4.
-            for (uint32 j = 0; j < words.length && out_slice.length > j*4; j++) {
+            //for (uint32 j = 0; j < words.length && out_slice.length > j*4; j++) {
+            for (uint32 j = 0; j < words.length; j++) {
                 // Load word at j into out_slice as little endian
-                load_uint32_to_le_bytes(words[j], out_slice, i+j*4);
+                //load_uint32_to_le_bytes(words[j], out_slice, i+j*4);
+                load_uint32_to_le_bytes(words[j], out_slice, j*4);
             }
 
-            output_block_counter += 1;
-        }
+            //output_block_counter += 1;
+        //}
     }
 
     function load_uint32_to_le_bytes(
@@ -187,13 +210,18 @@ contract Blake3Sol {
         uint32 offset
     ) private
     {
-        for (int i = 0; i < 4; i++) {
+        for (uint8 i = 0; i < 4; i++) {
+            //buf[offset+(3-i)] = (bytes4(n) >> (8 * i))[0];
+            buf[offset+(3-i)] = bytes1(uint8(n / (2 ** (i*8))));
+            //tempUint := xor(tempUint, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000)
+            /*
             assembly {
                 let cc := add(add(buf, 0x20), offset)
                 let buf_idx := add(cc, sub(3, i))
                 let n_idx := add(n, i)
                 mstore8(buf_idx, n_idx)
             }
+            */
         }
     }
 
@@ -219,7 +247,7 @@ contract Blake3Sol {
 
         for (uint8 i = 0; i < 4; i++) {
             //tempUint += uint32(uint8(_bytes[i]) * (2 ** (8*i)));
-            tempUint += uint32(bytes4(_bytes[3-i]) >> (8 * i));
+            tempUint += uint32(bytes4(_bytes[3-i+_start]) >> (8 * i));
         }
         /*
         assembly {
@@ -245,7 +273,6 @@ contract Blake3Sol {
                 "Data bytes is too long to convert to 8 4-byte words");
 
         for (uint8 i = 0; i < data_bytes.length/4; i++) {
-            // TODO Little-endian?
             words[i] = le_bytes_get_uint32(data_bytes, i*4);
         }
     }
@@ -254,12 +281,10 @@ contract Blake3Sol {
         bytes memory data_bytes,
         uint32[16] memory words)
     public {
-        //require(data_bytes.length <= 64 && data_bytes.length/4 == 0,
         require(data_bytes.length <= 64 && data_bytes.length%4 == 0,
                 "Data bytes is too long to convert to 16 4-byte words");
 
         for (uint8 i = 0; i < data_bytes.length/4; i++) {
-            // TODO Little-endian?
             words[i] = le_bytes_get_uint32(data_bytes, i*4);
         }
     }
