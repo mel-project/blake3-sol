@@ -66,20 +66,17 @@ contract Blake3Sol {
     public {
         unchecked {
         state[a] = state[a] + state[b] + mx;
-        //state[d] = (state[d] ^ state[a]) / 65536;
         state[d] = rotr(state[d] ^ state[a], 16);
         state[c] = state[c] + state[d];
-        //state[b] = (state[b] ^ state[c]) / 4096;
         state[b] = rotr(state[b] ^ state[c], 12);
         state[a] = state[a] + state[b] + my;
-        //state[d] = (state[d] ^ state[a]) / 256;
         state[d] = rotr(state[d] ^ state[a], 8);
         state[c] = state[c] + state[d];
-        //state[b] = (state[b] ^ state[c]) / 128;
         state[b] = rotr(state[b] ^ state[c], 7);
         }
     }
 
+    // TODO just for testing
     function round_ext(uint32[16] memory state, uint32[16] memory m) public
     returns (uint32[16] memory) {
         round(state, m);
@@ -109,11 +106,16 @@ contract Blake3Sol {
 
     function compress(
         uint32[8] memory chaining_value,
-        uint32[16] memory block_words,
+        uint32[16] memory block_words_ref,
         uint64 counter,
         uint32 block_len,
         uint32 flags) public returns (uint32[16] memory)
     {
+        uint32[16] memory block_words;
+        for (uint8 i = 0; i < 16; i++) {
+            block_words[i] = block_words_ref[i];
+        }
+
         uint32[16] memory state = [
             chaining_value[0],
             chaining_value[1],
@@ -156,11 +158,6 @@ contract Blake3Sol {
     }
 
     function rotr(uint32 x, uint8 n) private returns (uint32) {
-        /*
-        uint32 res;
-        unchecked {
-            res = bytes4(x / div_n);
-            */
         bytes4 b = bytes4(x);
         return uint32((b >> n) | (b << (32 - n)));
     }
