@@ -101,7 +101,9 @@ contract Blake3Sol {
         for (uint8 i = 0; i < 16; i++) {
             permuted[i] = m[MSG_PERMUTATION[i]];
         }
-        m = permuted;
+        for (uint8 i = 0; i < 16; i++) {
+            m[i] = permuted[i];
+        }
     }
 
     function compress(
@@ -157,7 +159,7 @@ contract Blake3Sol {
         return state;
     }
 
-    function rotr(uint32 x, uint8 n) private returns (uint32) {
+    function rotr(uint32 x, uint8 n) public returns (uint32) {
         bytes4 b = bytes4(x);
         return uint32((b >> n) | (b << (32 - n)));
     }
@@ -191,7 +193,8 @@ contract Blake3Sol {
             // Load compressed words into out_slice (4 bytes at a time)
             // The output length might not be a multiple of 4.
             //for (uint32 j = 0; j < words.length && out_slice.length > j*4; j++) {
-            for (uint32 j = 0; j < words.length; j++) {
+            //for (uint32 j = 0; j < words.length; j++) {
+            for (uint32 j = 0; j < 8; j++) {
                 // Load word at j into out_slice as little endian
                 //load_uint32_to_le_bytes(words[j], out_slice, i+j*4);
                 load_uint32_to_le_bytes(words[j], out_slice, j*4);
@@ -199,6 +202,14 @@ contract Blake3Sol {
 
             //output_block_counter += 1;
         //}
+    }
+
+    function shanes_le(
+        uint32 n
+    ) public returns (bytes memory) {
+        bytes memory buf = new bytes(8);
+        load_uint32_to_le_bytes(n, buf, 0);
+        return buf;
     }
 
     function load_uint32_to_le_bytes(
@@ -209,7 +220,7 @@ contract Blake3Sol {
     {
         for (uint8 i = 0; i < 4; i++) {
             //buf[offset+(3-i)] = (bytes4(n) >> (8 * i))[0];
-            buf[offset+(3-i)] = bytes1(uint8(n / (2 ** (i*8))));
+            buf[offset+(i)] = bytes1(uint8(n / (2 ** (i*8))));
             //tempUint := xor(tempUint, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000)
             /*
             assembly {
@@ -548,7 +559,7 @@ contract Blake3Sol {
 
     function finalize(Hasher memory self)
     public returns (bytes memory) {
-        bytes memory output = new bytes(256);
+        bytes memory output = new bytes(32);
         finalize_internal(self, output);
         return output;
     }
@@ -558,6 +569,7 @@ contract Blake3Sol {
         // parent chaining values along the right edge of the tree, until we
         // have the root Output.
         Output memory output = output(self.chunk_state);
+        /*
         uint32 parent_nodes_remaining = self.cv_stack_len;
         while (parent_nodes_remaining > 0) {
             parent_nodes_remaining -= 1;
@@ -568,6 +580,7 @@ contract Blake3Sol {
                 self.flags
             );
         }
+        */
         root_output_bytes(output, out_slice);
     }
 }
