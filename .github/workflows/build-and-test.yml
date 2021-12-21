@@ -40,5 +40,8 @@ jobs:
       - name: Move Forge To A PATH Directory
         run: sudo mv forge /usr/local/bin/forge
 
+      - name: Update Submodules
+        run: git submodule update --init --recursive
+
       - name: Run Forge Tests
         run: forge test
