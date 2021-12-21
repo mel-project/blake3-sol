@@ -119,6 +119,7 @@ contract Blake3SolTest is DSTest {
     }
 
     function testFail_basic_sanity() public {
+        console.log("Printing works!!!");
         assertTrue(false);
     }
 
