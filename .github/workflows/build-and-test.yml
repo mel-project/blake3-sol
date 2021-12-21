@@ -23,7 +23,7 @@ jobs:
         run: sudo apt install -y wget
 
       - name: Download Cast
-        run: wget https://github.com/themeliolabs/artifacts/raw/master/cast
+        run: wget -q https://github.com/themeliolabs/artifacts/raw/master/cast
 
       - name: Make Cast Executable
         run: chmod +x cast
@@ -32,7 +32,7 @@ jobs:
         run: sudo mv cast /usr/local/bin/forge
 
       - name: Download Forge
-        run: wget https://github.com/themeliolabs/artifacts/raw/master/forge
+        run: wget -q https://github.com/themeliolabs/artifacts/raw/master/forge
 
       - name: Make Forge Executable
         run: chmod +x forge
@@ -44,4 +44,6 @@ jobs:
         run: git submodule update --init --recursive
 
       - name: Run Forge Tests
+        env:
+          RUST_LOG: forge=trace
         run: forge test
