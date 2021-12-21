@@ -12,8 +12,6 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: rustembedded/cross:x86_64-unknown-linux-musl
 
     steps:
       - uses: actions/checkout@v2
