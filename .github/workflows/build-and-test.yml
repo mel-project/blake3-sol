@@ -44,4 +44,6 @@ jobs:
         run: git submodule update --init --recursive
 
       - name: Run Forge Tests
+        env:
+          RUST_LOG: forge=trace
         run: forge test
