@@ -16,6 +16,12 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Update Apt
+        run: sudo apt update
+
+      - name: Install Wget
+        run: sudo apt install -y wget
+
       - name: Download Cast
         run: wget https://github.com/themeliolabs/artifacts/raw/master/cast
 
@@ -33,6 +39,9 @@ jobs:
 
       - name: Move Forge To A PATH Directory
         run: sudo mv forge /usr/local/bin/forge
+
+      - name: Update Submodules
+        run: git submodule update --init --recursive
 
       - name: Run Forge Tests
         run: forge test
