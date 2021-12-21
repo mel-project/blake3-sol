@@ -46,4 +46,4 @@ jobs:
       - name: Run Forge Tests
         env:
           RUST_LOG: forge=trace
-        run: forge test
+        run: forge test --verbosity 3
