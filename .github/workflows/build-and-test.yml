@@ -1,0 +1,40 @@
+name: Build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: rustembedded/cross:x86_64-unknown-linux-musl
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Download Cast
+        run: wget https://github.com/themeliolabs/artifacts/raw/master/cast
+
+      - name: Make Cast Executable
+        run: chmod +x cast
+
+      - name: Move Cast To A PATH Directory
+        run: sudo mv cast /usr/local/bin/forge
+
+      - name: Download Forge
+        run: wget https://github.com/themeliolabs/artifacts/raw/master/forge
+
+      - name: Make Forge Executable
+        run: chmod +x forge
+
+      - name: Move Forge To A PATH Directory
+        run: sudo mv forge /usr/local/bin/forge
+
+      - name: Run Forge Tests
+        run: forge test
