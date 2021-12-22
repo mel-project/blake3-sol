@@ -15,6 +15,16 @@ We use the [foundry tools](https://github.com/gakonst/foundry) for building and 
 
 Static builds of the `forge` and `cast` tools can be found [here](https://github.com/themeliolabs/artifacts).
 
+If you would prefer to install them via `cargo`, run:
+
+```
+$ cargo install --git https://github.com/gakonst/foundry --bin forge --locked
+$ cargo install --git https://github.com/gakonst/foundry --bin cast --locked
+```
+
+
+
+
 To build, run:
 ```
 $ forge build
