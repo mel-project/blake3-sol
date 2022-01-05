@@ -63,7 +63,7 @@ contract Blake3Sol {
         uint32 d,
         uint32 mx,
         uint32 my)
-    public {
+    private {
         unchecked {
         state[a] = state[a] + state[b] + mx;
         state[d] = rotr(state[d] ^ state[a], 16);
@@ -76,14 +76,7 @@ contract Blake3Sol {
         }
     }
 
-    // TODO just for testing
-    function round_ext(uint32[16] memory state, uint32[16] memory m) public
-    returns (uint32[16] memory) {
-        round(state, m);
-        return state;
-    }
-
-    function round(uint32[16] memory state, uint32[16] memory m) public {
+    function round(uint32[16] memory state, uint32[16] memory m) private {
         // Mix the columns.
         g(state, 0, 4, 8, 12, m[0], m[1]);
         g(state, 1, 5, 9, 13, m[2], m[3]);
@@ -96,7 +89,7 @@ contract Blake3Sol {
         g(state, 3, 4, 9, 14, m[14], m[15]);
     }
 
-    function permute(uint32[16] memory m) public {
+    function permute(uint32[16] memory m) private {
         uint32[16] memory permuted;
         for (uint8 i = 0; i < 16; i++) {
             permuted[i] = m[MSG_PERMUTATION[i]];
@@ -111,7 +104,7 @@ contract Blake3Sol {
         uint32[16] memory block_words_ref,
         uint64 counter,
         uint32 block_len,
-        uint32 flags) public returns (uint32[16] memory)
+        uint32 flags) private returns (uint32[16] memory)
     {
         uint32[16] memory block_words;
         for (uint8 i = 0; i < 16; i++) {
@@ -159,12 +152,12 @@ contract Blake3Sol {
         return state;
     }
 
-    function rotr(uint32 x, uint8 n) public returns (uint32) {
+    function rotr(uint32 x, uint8 n) private returns (uint32) {
         bytes4 b = bytes4(x);
         return uint32((b >> n) | (b << (32 - n)));
     }
 
-    function chaining_value(Output memory o) public returns (uint32[8] memory) {
+    function chaining_value(Output memory o) private returns (uint32[8] memory) {
         uint32[16] memory compression_output = compress(
             o.input_chaining_value,
             o.block_words,
@@ -196,20 +189,11 @@ contract Blake3Sol {
             //for (uint32 j = 0; j < words.length; j++) {
             for (uint32 j = 0; j < 8; j++) {
                 // Load word at j into out_slice as little endian
-                //load_uint32_to_le_bytes(words[j], out_slice, i+j*4);
                 load_uint32_to_le_bytes(words[j], out_slice, j*4);
             }
 
             //output_block_counter += 1;
         //}
-    }
-
-    function shanes_le(
-        uint32 n
-    ) public returns (bytes memory) {
-        bytes memory buf = new bytes(8);
-        load_uint32_to_le_bytes(n, buf, 0);
-        return buf;
     }
 
     function load_uint32_to_le_bytes(
@@ -219,17 +203,7 @@ contract Blake3Sol {
     ) private
     {
         for (uint8 i = 0; i < 4; i++) {
-            //buf[offset+(3-i)] = (bytes4(n) >> (8 * i))[0];
-            buf[offset+(i)] = bytes1(uint8(n / (2 ** (i*8))));
-            //tempUint := xor(tempUint, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000)
-            /*
-            assembly {
-                let cc := add(add(buf, 0x20), offset)
-                let buf_idx := add(cc, sub(3, i))
-                let n_idx := add(n, i)
-                mstore8(buf_idx, n_idx)
-            }
-            */
+            buf[offset+i] = bytes1(uint8(n / (2 ** (i*8))));
         }
     }
 
@@ -276,7 +250,7 @@ contract Blake3Sol {
     function words_from_little_endian_bytes8(
         bytes memory data_bytes,
         uint32[8] memory words)
-    public {
+    private {
         require(data_bytes.length <= 4*8,
                 "Data bytes is too long to convert to 8 4-byte words");
 
@@ -288,7 +262,7 @@ contract Blake3Sol {
     function words_from_little_endian_bytes(
         bytes memory data_bytes,
         uint32[16] memory words)
-    public {
+    private {
         require(data_bytes.length <= 64 && data_bytes.length%4 == 0,
                 "Data bytes is too long to convert to 16 4-byte words");
 
@@ -297,19 +271,9 @@ contract Blake3Sol {
         }
     }
 
-    // Seems this explicit conversion is necessary because solidity can't infer size in a slice
-    /*
-    function bytes_to_uint256(bytes calldata b) public returns (uint256) {
-        uint256 number;
-        for(uint i=0;i<b.length;i++){
-            number = number + uint8(b[i])*(2**(8*(b.length-(i+1))));
-        }
-        return number;
-    }
-    */
 
     // TODO I wish this didn't require a copy to convert array sizes
-    function first_8_words(uint32[16] memory words) public view returns (uint32[8] memory) {
+    function first_8_words(uint32[16] memory words) private view returns (uint32[8] memory) {
         // TODO there must be a way to do this without copying
         // How to take a slice of a memory array?
         uint32[8] memory first_8;
@@ -329,7 +293,7 @@ contract Blake3Sol {
         uint32[8] memory key_words,
         uint64 chunk_counter,
         uint32 flags)
-    public view returns (ChunkState memory) {
+    private view returns (ChunkState memory) {
         bytes memory block_bytes = new bytes(BLOCK_LEN);
         return ChunkState({
             chaining_value: key_words,
@@ -341,11 +305,11 @@ contract Blake3Sol {
         });
     }
 
-    function len(ChunkState memory chunk) public view returns (uint32) {
+    function len(ChunkState memory chunk) private view returns (uint32) {
         return BLOCK_LEN * chunk.blocks_compressed + chunk.block_len;
     }
 
-    function start_flag(ChunkState memory chunk) public view returns (uint32) {
+    function start_flag(ChunkState memory chunk) private view returns (uint32) {
         if (chunk.blocks_compressed == 0) {
             return CHUNK_START;
         } else {
@@ -358,7 +322,7 @@ contract Blake3Sol {
         ChunkState memory chunk,
         bytes calldata input
     )
-    public returns (uint32) {
+    private returns (uint32) {
         uint32 input_offset = 0;
         while (input_offset < input.length) {
             // If the block buffer is full, compress it and clear it. More
@@ -413,7 +377,7 @@ contract Blake3Sol {
         }
     }
 
-    function output(ChunkState memory chunk) public returns (Output memory) {
+    function output(ChunkState memory chunk) private returns (Output memory) {
         uint32[16] memory block_words;
         words_from_little_endian_bytes(chunk.block_bytes, block_words);
 
@@ -435,7 +399,7 @@ contract Blake3Sol {
         uint32[8] memory right_child_cv,
         uint32[8] memory key_words,
         uint32 flags
-    ) public returns (Output memory) {
+    ) private returns (Output memory) {
         uint32[16] memory block_words;
         for (uint8 i = 0; i < 8; i++) {
             block_words[i] = left_child_cv[i];
@@ -458,7 +422,7 @@ contract Blake3Sol {
         uint32[8] memory right_child_cv,
         uint32[8] memory key_words,
         uint32 flags
-    ) public returns (uint32[8] memory) {
+    ) private returns (uint32[8] memory) {
         return chaining_value(parent_output(left_child_cv, right_child_cv, key_words, flags));
     }
 
@@ -537,7 +501,7 @@ contract Blake3Sol {
             // If the current chunk is complete, finalize it and reset the
             // chunk state. More input is coming, so this chunk is not ROOT.
             if (len(self.chunk_state) == CHUNK_LEN) {
-                uint32[8] memory chunk_cv  = chaining_value(output(self.chunk_state));
+                uint32[8] memory chunk_cv = chaining_value(output(self.chunk_state));
                 uint64 total_chunks = self.chunk_state.chunk_counter + 1;
                 add_chunk_chaining_value(self, chunk_cv, total_chunks);
                 self.chunk_state = new_chunkstate(self.key_words, total_chunks, self.flags);
@@ -545,7 +509,7 @@ contract Blake3Sol {
 
             // Compress input bytes into the current chunk state.
             uint32 want = CHUNK_LEN - len(self.chunk_state);
-            uint32 take = min(want, uint32(input.length));
+            uint32 take = min(want, uint32(input.length - input_offset));
 
             // Update chunk state
             bytes calldata input_slice = input[input_offset:take+input_offset];
@@ -564,12 +528,12 @@ contract Blake3Sol {
         return output;
     }
 
-    function finalize_internal(Hasher memory self, bytes memory out_slice) public {
+    function finalize_internal(Hasher memory self, bytes memory out_slice)
+    private {
         // Starting with the Output from the current chunk, compute all the
         // parent chaining values along the right edge of the tree, until we
         // have the root Output.
         Output memory output = output(self.chunk_state);
-        /*
         uint32 parent_nodes_remaining = self.cv_stack_len;
         while (parent_nodes_remaining > 0) {
             parent_nodes_remaining -= 1;
@@ -580,7 +544,6 @@ contract Blake3Sol {
                 self.flags
             );
         }
-        */
         root_output_bytes(output, out_slice);
     }
 }
