@@ -3,6 +3,8 @@ pragma solidity ^0.8.6;
 
 import "ds-test/test.sol";
 
+import "hardhat-core/console.sol";
+
 import "./Blake3Sol.sol";
 
 contract Blake3SolTest is DSTest {

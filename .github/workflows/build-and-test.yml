@@ -1,0 +1,49 @@
+name: Build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Update Apt
+        run: sudo apt update
+
+      - name: Install Wget
+        run: sudo apt install -y wget
+
+      - name: Download Cast
+        run: wget -q https://github.com/themeliolabs/artifacts/raw/master/cast
+
+      - name: Make Cast Executable
+        run: chmod +x cast
+
+      - name: Move Cast To A PATH Directory
+        run: sudo mv cast /usr/local/bin/forge
+
+      - name: Download Forge
+        run: wget -q https://github.com/themeliolabs/artifacts/raw/master/forge
+
+      - name: Make Forge Executable
+        run: chmod +x forge
+
+      - name: Move Forge To A PATH Directory
+        run: sudo mv forge /usr/local/bin/forge
+
+      - name: Update Submodules
+        run: git submodule update --init --recursive
+
+      - name: Run Forge Tests
+        env:
+          RUST_LOG: forge=trace
+        run: forge test --verbosity 3
