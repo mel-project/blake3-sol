@@ -35,7 +35,7 @@ $ forge build
 
 We have the option of logging via two frameworks: [hardhat](https://github.com/nomiclabs/hardhat) and [ds-test](https://github.com/dapphub/ds-test)
 
-To log with `ds-test`, add this line to the top of your solidity file:
+To log with `hardhat`, add this line to the top of your solidity file:
 ```
 import "hardhat-core/console.sol";
 ```
