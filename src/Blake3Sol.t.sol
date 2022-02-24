@@ -3,7 +3,7 @@ pragma solidity ^0.8.6;
 
 import "ds-test/test.sol";
 
-import "hardhat-core/console.sol";
+import "hardhat/packages/hardhat-core/console.sol";
 
 import "./Blake3Sol.sol";
 
