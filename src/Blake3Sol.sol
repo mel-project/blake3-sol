@@ -1,111 +1,120 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.6;
 
-//type State is uint32[16];
-//type usize is uint32;
-uint8 constant BLOCK_LEN = 64;
-uint32 constant OUT_LEN = 32;
-uint32 constant CHUNK_LEN = 1024;
+library Blake3Sol {
+    //type State is uint32[16];
+    //type usize is uint32;
+    uint8 constant BLOCK_LEN = 64;
+    uint32 constant OUT_LEN = 32;
+    uint32 constant CHUNK_LEN = 1024;
 
-// Flag constants
-uint32 constant CHUNK_START = 1 << 0;
-uint32 constant CHUNK_END = 1 << 1;
-uint32 constant PARENT = 1 << 2;
-uint32 constant ROOT = 1 << 3;
-uint32 constant KEYED_HASH = 1 << 4;
-uint32 constant DERIVE_KEY_CONTEXT = 1 << 5;
-uint32 constant DERIVE_KEY_MATERIAL = 1 << 6;
+    // Flag constants
+    uint32 constant CHUNK_START = 1 << 0;
+    uint32 constant CHUNK_END = 1 << 1;
+    uint32 constant PARENT = 1 << 2;
+    uint32 constant ROOT = 1 << 3;
+    uint32 constant KEYED_HASH = 1 << 4;
+    uint32 constant DERIVE_KEY_CONTEXT = 1 << 5;
+    uint32 constant DERIVE_KEY_MATERIAL = 1 << 6;
 
+    // Product of a ChunkState before deriving chain value
+    struct Output {
+        uint32[8] input_chaining_value;
+        uint32[16] block_words;
+        uint64 counter;
+        uint32 block_len;
+        uint32 flags;
+    }
 
-// Product of a ChunkState before deriving chain value
-struct Output {
-    uint32[8] input_chaining_value;
-    uint32[16] block_words;
-    uint64 counter;
-    uint32 block_len;
-    uint32 flags;
-}
+    struct ChunkState {
+        uint32[8] chaining_value;
+        uint64 chunk_counter;
+        // Has a max size of BLOCK_LEN
+        bytes block_bytes;
+        uint32 block_len;
+        uint8 blocks_compressed;
+        uint32 flags;
+    }
 
-struct ChunkState {
-    uint32[8] chaining_value;
-    uint64 chunk_counter;
-    // Has a max size of BLOCK_LEN
-    bytes block_bytes;
-    uint32 block_len;
-    uint8 blocks_compressed;
-    uint32 flags;
-}
+    // An incremental hasher that can accept any number of writes.
+    struct Hasher {
+        ChunkState chunk_state;
+        uint32[8] key_words;
+        uint32[8][54] cv_stack; // Space for 54 subtree chaining values:
+        uint8 cv_stack_len;     // 2^54 * CHUNK_LEN = 2^64
+        uint32 flags;
+    }
 
-// An incremental hasher that can accept any number of writes.
-struct Hasher {
-    ChunkState chunk_state;
-    uint32[8] key_words;
-    uint32[8][54] cv_stack; // Space for 54 subtree chaining values:
-    uint8 cv_stack_len;     // 2^54 * CHUNK_LEN = 2^64
-    uint32 flags;
-}
-
-
-
-contract Blake3Sol {
     // This should remain constant but solidity doesn't support declaring it
-    uint8[16] MSG_PERMUTATION = [2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8];
-    uint32[8] IV = [
-        0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19
-    ];
+    // uint8[16] MSG_PERMUTATION = [2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8];
+    // uint32[8] IV = [
+    //     0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19
+    // ];
+    function _MSG_PERMUTATION() internal pure returns (uint8[16] memory) {
+        return [2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8];
+    }
+
+    function _IV() internal pure returns (uint32[8] memory) {
+        return [0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19];
+    }
 
     // Mixing function G
-    function g(
+    function _g(
         uint32[16] memory state,
         uint32 a,
         uint32 b,
         uint32 c,
         uint32 d,
         uint32 mx,
-        uint32 my)
-    private {
+        uint32 my
+    ) private pure {
         unchecked {
-        state[a] = state[a] + state[b] + mx;
-        state[d] = rotr(state[d] ^ state[a], 16);
-        state[c] = state[c] + state[d];
-        state[b] = rotr(state[b] ^ state[c], 12);
-        state[a] = state[a] + state[b] + my;
-        state[d] = rotr(state[d] ^ state[a], 8);
-        state[c] = state[c] + state[d];
-        state[b] = rotr(state[b] ^ state[c], 7);
+            state[a] = state[a] + state[b] + mx;
+            state[d] = _rotr(state[d] ^ state[a], 16);
+            state[c] = state[c] + state[d];
+            state[b] = _rotr(state[b] ^ state[c], 12);
+            state[a] = state[a] + state[b] + my;
+            state[d] = _rotr(state[d] ^ state[a], 8);
+            state[c] = state[c] + state[d];
+            state[b] = _rotr(state[b] ^ state[c], 7);
         }
     }
 
-    function round(uint32[16] memory state, uint32[16] memory m) private {
+    function _round(uint32[16] memory state, uint32[16] memory m) private pure {
         // Mix the columns.
-        g(state, 0, 4, 8, 12, m[0], m[1]);
-        g(state, 1, 5, 9, 13, m[2], m[3]);
-        g(state, 2, 6, 10, 14, m[4], m[5]);
-        g(state, 3, 7, 11, 15, m[6], m[7]);
+        _g(state, 0, 4, 8, 12, m[0], m[1]);
+        _g(state, 1, 5, 9, 13, m[2], m[3]);
+        _g(state, 2, 6, 10, 14, m[4], m[5]);
+        _g(state, 3, 7, 11, 15, m[6], m[7]);
+
         // Mix the diagonals.
-        g(state, 0, 5, 10, 15, m[8], m[9]);
-        g(state, 1, 6, 11, 12, m[10], m[11]);
-        g(state, 2, 7, 8, 13, m[12], m[13]);
-        g(state, 3, 4, 9, 14, m[14], m[15]);
+        _g(state, 0, 5, 10, 15, m[8], m[9]);
+        _g(state, 1, 6, 11, 12, m[10], m[11]);
+        _g(state, 2, 7, 8, 13, m[12], m[13]);
+        _g(state, 3, 4, 9, 14, m[14], m[15]);
     }
 
-    function permute(uint32[16] memory m) private {
+    function _permute(uint32[16] memory m) private pure {
+        uint8[16] memory MSG_PERMUTATION = _MSG_PERMUTATION();
         uint32[16] memory permuted;
+
         for (uint8 i = 0; i < 16; i++) {
             permuted[i] = m[MSG_PERMUTATION[i]];
         }
+
         for (uint8 i = 0; i < 16; i++) {
             m[i] = permuted[i];
         }
     }
 
-    function compress(
+    function _compress(
         uint32[8] memory chaining_value,
         uint32[16] memory block_words_ref,
         uint64 counter,
         uint32 block_len,
-        uint32 flags) private returns (uint32[16] memory)
-    {
+        uint32 flags) private pure returns (uint32[16] memory
+    ) {
+        uint32[8] memory IV = _IV();
         uint32[16] memory block_words;
         for (uint8 i = 0; i < 16; i++) {
             block_words[i] = block_words_ref[i];
@@ -130,19 +139,19 @@ contract Blake3Sol {
             flags
         ];
 
-        round(state, block_words); // round 1
-        permute(block_words);
-        round(state, block_words); // round 2
-        permute(block_words);
-        round(state, block_words); // round 3
-        permute(block_words);
-        round(state, block_words); // round 4
-        permute(block_words);
-        round(state, block_words); // round 5
-        permute(block_words);
-        round(state, block_words); // round 6
-        permute(block_words);
-        round(state, block_words); // round 7
+        _round(state, block_words); // round 1
+        _permute(block_words);
+        _round(state, block_words); // round 2
+        _permute(block_words);
+        _round(state, block_words); // round 3
+        _permute(block_words);
+        _round(state, block_words); // round 4
+        _permute(block_words);
+        _round(state, block_words); // round 5
+        _permute(block_words);
+        _round(state, block_words); // round 6
+        _permute(block_words);
+        _round(state, block_words); // round 7
 
         for (uint8 i = 0; i < 8; i++) {
             state[i] ^= state[i + 8];
@@ -152,63 +161,63 @@ contract Blake3Sol {
         return state;
     }
 
-    function rotr(uint32 x, uint8 n) private returns (uint32) {
+    function _rotr(uint32 x, uint8 n) private pure returns (uint32) {
         bytes4 b = bytes4(x);
         return uint32((b >> n) | (b << (32 - n)));
     }
 
-    function chaining_value(Output memory o) private returns (uint32[8] memory) {
-        uint32[16] memory compression_output = compress(
+    function _chaining_value(Output memory o) private pure returns (uint32[8] memory) {
+        uint32[16] memory compression_output = _compress(
             o.input_chaining_value,
             o.block_words,
             o.counter,
             o.block_len,
-            o.flags);
+            o.flags
+        );
 
-        return first_8_words(compression_output);
+        return _first_8_words(compression_output);
     }
 
-    function root_output_bytes(
+    function _root_output_bytes(
         Output memory self,
-        bytes memory out_slice) private
-    {
+        bytes memory out_slice
+    ) private pure {
         //uint32 output_block_counter = 0;
         // Take 64-byte chunks at a time from out_slice
         //for (uint32 i = 0; i < out_slice.length; i += 2 * OUT_LEN) {
-            uint32[16] memory words = compress(
-                self.input_chaining_value,
-                self.block_words,
-                0,
-                //output_block_counter,
-                self.block_len,
-                self.flags | ROOT
-            );
-            // Load compressed words into out_slice (4 bytes at a time)
-            // The output length might not be a multiple of 4.
-            //for (uint32 j = 0; j < words.length && out_slice.length > j*4; j++) {
-            //for (uint32 j = 0; j < words.length; j++) {
-            for (uint32 j = 0; j < 8; j++) {
-                // Load word at j into out_slice as little endian
-                load_uint32_to_le_bytes(words[j], out_slice, j*4);
-            }
+        uint32[16] memory words = _compress(
+            self.input_chaining_value,
+            self.block_words,
+            0,
+            //output_block_counter,
+            self.block_len,
+            self.flags | ROOT
+        );
+
+        // Load compressed words into out_slice (4 bytes at a time)
+        // The output length might not be a multiple of 4.
+        //for (uint32 j = 0; j < words.length && out_slice.length > j*4; j++) {
+        //for (uint32 j = 0; j < words.length; j++) {
+        for (uint32 j = 0; j < 8; j++) {
+            // Load word at j into out_slice as little endian
+            _load_uint32_to_le_bytes(words[j], out_slice, j*4);
+        }
 
             //output_block_counter += 1;
         //}
     }
 
-    function load_uint32_to_le_bytes(
+    function _load_uint32_to_le_bytes(
         uint32 n,
         bytes memory buf,
         uint32 offset
-    ) private
-    {
+    ) private pure {
         for (uint8 i = 0; i < 4; i++) {
             buf[offset+i] = bytes1(uint8(n / (2 ** (i*8))));
         }
     }
 
-    function uint32_to_le_bytes(uint32 n) private pure returns (bytes4)
-    {
+    function _uint32_to_le_bytes(uint32 n) private pure returns (bytes4) {
         bytes4 buf;
         for (int i = 0; i < 4; i++) {
             assembly {
@@ -223,7 +232,7 @@ contract Blake3Sol {
     }
 
 
-    function le_bytes_get_uint32(bytes memory _bytes, uint256 _start) internal pure returns (uint32) {
+    function _le_bytes_get_uint32(bytes memory _bytes, uint256 _start) internal pure returns (uint32) {
         require(_bytes.length >= _start + 4, "le_bytes_get_uint32_outOfBounds");
         uint32 tempUint;
 
@@ -247,33 +256,33 @@ contract Blake3Sol {
         return tempUint;
     }
 
-    function words_from_little_endian_bytes8(
+    function _words_from_little_endian_bytes8(
         bytes memory data_bytes,
-        uint32[8] memory words)
-    private {
+        uint32[8] memory words
+    ) private pure {
         require(data_bytes.length <= 4*8,
                 "Data bytes is too long to convert to 8 4-byte words");
 
         for (uint8 i = 0; i < data_bytes.length/4; i++) {
-            words[i] = le_bytes_get_uint32(data_bytes, i*4);
+            words[i] = _le_bytes_get_uint32(data_bytes, i*4);
         }
     }
 
-    function words_from_little_endian_bytes(
+    function _words_from_little_endian_bytes(
         bytes memory data_bytes,
-        uint32[16] memory words)
-    private {
+        uint32[16] memory words
+    ) private pure {
         require(data_bytes.length <= 64 && data_bytes.length%4 == 0,
                 "Data bytes is too long to convert to 16 4-byte words");
 
         for (uint8 i = 0; i < data_bytes.length/4; i++) {
-            words[i] = le_bytes_get_uint32(data_bytes, i*4);
+            words[i] = _le_bytes_get_uint32(data_bytes, i*4);
         }
     }
 
 
     // TODO I wish this didn't require a copy to convert array sizes
-    function first_8_words(uint32[16] memory words) private view returns (uint32[8] memory) {
+    function _first_8_words(uint32[16] memory words) private pure returns (uint32[8] memory) {
         // TODO there must be a way to do this without copying
         // How to take a slice of a memory array?
         uint32[8] memory first_8;
@@ -289,11 +298,11 @@ contract Blake3Sol {
     // Chunk state functions
     //
 
-    function new_chunkstate(
+    function _new_chunkstate(
         uint32[8] memory key_words,
         uint64 chunk_counter,
-        uint32 flags)
-    private view returns (ChunkState memory) {
+        uint32 flags
+    ) private pure returns (ChunkState memory) {
         bytes memory block_bytes = new bytes(BLOCK_LEN);
         return ChunkState({
             chaining_value: key_words,
@@ -305,11 +314,11 @@ contract Blake3Sol {
         });
     }
 
-    function len(ChunkState memory chunk) private view returns (uint32) {
+    function _len(ChunkState memory chunk) private pure returns (uint32) {
         return BLOCK_LEN * chunk.blocks_compressed + chunk.block_len;
     }
 
-    function start_flag(ChunkState memory chunk) private view returns (uint32) {
+    function _start_flag(ChunkState memory chunk) private pure returns (uint32) {
         if (chunk.blocks_compressed == 0) {
             return CHUNK_START;
         } else {
@@ -318,24 +327,23 @@ contract Blake3Sol {
     }
 
     // Returns a new input offset
-    function update_chunkstate(
+    function _update_chunkstate(
         ChunkState memory chunk,
         bytes calldata input
-    )
-    private returns (uint32) {
+    ) private pure {//returns (uint32) {
         uint32 input_offset = 0;
         while (input_offset < input.length) {
             // If the block buffer is full, compress it and clear it. More
             // input is coming, so this compression is not CHUNK_END.
             if (chunk.block_len == BLOCK_LEN) {
                 uint32[16] memory block_words;
-                words_from_little_endian_bytes(chunk.block_bytes, block_words);
-                chunk.chaining_value = first_8_words(compress(
+                _words_from_little_endian_bytes(chunk.block_bytes, block_words);
+                chunk.chaining_value = _first_8_words(_compress(
                     chunk.chaining_value,
                     block_words,
                     chunk.chunk_counter,
                     BLOCK_LEN,
-                    chunk.flags | start_flag(chunk)
+                    chunk.flags | _start_flag(chunk)
                 ));
                 chunk.blocks_compressed += 1;
                 // TODO probably cheaper to zero-out byte array than to reallocate
@@ -346,7 +354,7 @@ contract Blake3Sol {
             // Take enough to fill a block [min(want, input.length)]
             uint32 want = BLOCK_LEN - chunk.block_len;
             // TODO be more careful with this downcast
-            uint32 take = min(want, uint32(input.length - input_offset));
+            uint32 take = _min(want, uint32(input.length - input_offset));
 
             // Copy bytes from input to chunk block
             //chunk.block_bytes[self.block_len as usize..][..take].copy_from_slice(&input[..take]);
@@ -354,7 +362,7 @@ contract Blake3Sol {
                 // TODO recheck this logic
                 chunk.block_bytes[i+chunk.block_len] = input[input_offset+i];
             }
-           /*
+            /*
             bytes memory block_ref = chunk.block_bytes;
             uint32 blen = chunk.block_len;
             assembly {
@@ -369,7 +377,7 @@ contract Blake3Sol {
         }
     }
 
-    function min(uint32 x, uint32 y) private returns (uint32) {
+    function _min(uint32 x, uint32 y) private pure returns (uint32) {
         if (x < y) {
             return x;
         } else {
@@ -377,16 +385,16 @@ contract Blake3Sol {
         }
     }
 
-    function output(ChunkState memory chunk) private returns (Output memory) {
+    function _output(ChunkState memory chunk) private pure returns (Output memory) {
         uint32[16] memory block_words;
-        words_from_little_endian_bytes(chunk.block_bytes, block_words);
+        _words_from_little_endian_bytes(chunk.block_bytes, block_words);
 
         return Output({
             input_chaining_value: chunk.chaining_value,
             block_words: block_words,
             counter: chunk.chunk_counter,
             block_len: chunk.block_len,
-            flags: chunk.flags | start_flag(chunk) | CHUNK_END
+            flags: chunk.flags | _start_flag(chunk) | CHUNK_END
         });
     }
 
@@ -394,12 +402,12 @@ contract Blake3Sol {
     // Parent functions
     //
 
-    function parent_output(
+    function _parent_output(
         uint32[8] memory left_child_cv,
         uint32[8] memory right_child_cv,
         uint32[8] memory key_words,
         uint32 flags
-    ) private returns (Output memory) {
+    ) private pure returns (Output memory) {
         uint32[16] memory block_words;
         for (uint8 i = 0; i < 8; i++) {
             block_words[i] = left_child_cv[i];
@@ -417,13 +425,13 @@ contract Blake3Sol {
         });
     }
 
-    function parent_cv(
+    function _parent_cv(
         uint32[8] memory left_child_cv,
         uint32[8] memory right_child_cv,
         uint32[8] memory key_words,
         uint32 flags
-    ) private returns (uint32[8] memory) {
-        return chaining_value(parent_output(left_child_cv, right_child_cv, key_words, flags));
+    ) private pure returns (uint32[8] memory) {
+        return _chaining_value(_parent_output(left_child_cv, right_child_cv, key_words, flags));
     }
 
 
@@ -431,11 +439,12 @@ contract Blake3Sol {
     // Hasher functions
     //
 
-    function new_hasher_internal(uint32[8] memory key_words, uint32 flags)
-    private returns (Hasher memory) {
+    function _new_hasher_internal(
+        uint32[8] memory key_words, uint32 flags
+    ) private pure returns (Hasher memory) {
         uint32[8][54] memory cv_stack;
         return Hasher({
-            chunk_state: new_chunkstate(key_words, 0, flags),
+            chunk_state: _new_chunkstate(key_words, 0, flags),
             key_words: key_words,
             cv_stack: cv_stack,
             cv_stack_len: 0,
@@ -444,76 +453,81 @@ contract Blake3Sol {
     }
 
     /// Construct a new `Hasher` for the regular hash function.
-    function new_hasher() public returns (Hasher memory) {
-        return new_hasher_internal(IV, 0);
+    function new_hasher() public pure returns (Hasher memory) {
+        uint32[8] memory IV = _IV();
+        return _new_hasher_internal(IV, 0);
     }
 
     /// Construct a new `Hasher` for the keyed hash function.
-    function new_keyed(bytes calldata key) public returns (Hasher memory) {
+    function new_keyed(bytes calldata key) public pure returns (Hasher memory) {
         uint32[8] memory key_words;
         bytes memory key_mem = key;
-        words_from_little_endian_bytes8(key_mem, key_words);
-        return new_hasher_internal(key_words, KEYED_HASH);
+        _words_from_little_endian_bytes8(key_mem, key_words);
+        return _new_hasher_internal(key_words, KEYED_HASH);
     }
 
     // Construct a new `Hasher` for the key derivation function. The context
     // string should be hardcoded, globally unique, and application-specific
-    function new_derive_key(bytes calldata context) public returns (Hasher memory) {
-        Hasher memory context_hasher = new_hasher_internal(IV, DERIVE_KEY_CONTEXT);
+    function new_derive_key(bytes calldata context) public pure returns (Hasher memory) {
+        uint32[8] memory IV = _IV();
+        Hasher memory context_hasher = _new_hasher_internal(IV, DERIVE_KEY_CONTEXT);
         update_hasher(context_hasher, context);
 
         bytes memory context_key = new bytes(256);
-        finalize_internal(context_hasher, context_key);
+        _finalize_internal(context_hasher, context_key);
 
         uint32[8] memory context_key_words;
-        words_from_little_endian_bytes8(context_key, context_key_words);
+        _words_from_little_endian_bytes8(context_key, context_key_words);
 
-        return new_hasher_internal(context_key_words, DERIVE_KEY_MATERIAL);
+        return _new_hasher_internal(context_key_words, DERIVE_KEY_MATERIAL);
     }
 
-    function push_stack(Hasher memory self, uint32[8] memory cv) private {
+    function _push_stack(Hasher memory self, uint32[8] memory cv) private pure {
         self.cv_stack[self.cv_stack_len] = cv;
         self.cv_stack_len += 1;
     }
 
-    function pop_stack(Hasher memory self) private returns (uint32[8] memory) {
+    function _pop_stack(Hasher memory self) private pure returns (uint32[8] memory) {
         self.cv_stack_len -= 1;
         return self.cv_stack[self.cv_stack_len];
     }
 
-    function add_chunk_chaining_value(
+    function _add_chunk_chaining_value(
         Hasher memory self,
         uint32[8] memory new_cv,
-        uint64 total_chunks) private
-    {
+        uint64 total_chunks
+    ) private pure {
         while (total_chunks & 1 == 0) {
-            new_cv = parent_cv(pop_stack(self), new_cv, self.key_words, self.flags);
+            new_cv = _parent_cv(_pop_stack(self), new_cv, self.key_words, self.flags);
             total_chunks >>= 1;
         }
-        push_stack(self, new_cv);
+
+        _push_stack(self, new_cv);
     }
 
-    /// Add input to the hash state. This can be called any number of times.
-    function update_hasher(Hasher memory self, bytes calldata input)
-    public returns (Hasher memory) {
+    // Add input to the hash state. This can be called any number of times.
+    function update_hasher(
+        Hasher memory self, bytes calldata input
+    ) public pure returns (Hasher memory) {
         uint32 input_offset = 0;
+
         while (input_offset < input.length) {
             // If the current chunk is complete, finalize it and reset the
             // chunk state. More input is coming, so this chunk is not ROOT.
-            if (len(self.chunk_state) == CHUNK_LEN) {
-                uint32[8] memory chunk_cv = chaining_value(output(self.chunk_state));
+            if (_len(self.chunk_state) == CHUNK_LEN) {
+                uint32[8] memory chunk_cv = _chaining_value(_output(self.chunk_state));
                 uint64 total_chunks = self.chunk_state.chunk_counter + 1;
-                add_chunk_chaining_value(self, chunk_cv, total_chunks);
-                self.chunk_state = new_chunkstate(self.key_words, total_chunks, self.flags);
+                _add_chunk_chaining_value(self, chunk_cv, total_chunks);
+                self.chunk_state = _new_chunkstate(self.key_words, total_chunks, self.flags);
             }
 
             // Compress input bytes into the current chunk state.
-            uint32 want = CHUNK_LEN - len(self.chunk_state);
-            uint32 take = min(want, uint32(input.length - input_offset));
+            uint32 want = CHUNK_LEN - _len(self.chunk_state);
+            uint32 take = _min(want, uint32(input.length - input_offset));
 
             // Update chunk state
             bytes calldata input_slice = input[input_offset:take+input_offset];
-            update_chunkstate(self.chunk_state, input_slice);
+            _update_chunkstate(self.chunk_state, input_slice);
 
             input_offset += take;
         }
@@ -521,29 +535,30 @@ contract Blake3Sol {
         return self;
     }
 
-    function finalize(Hasher memory self)
-    public returns (bytes memory) {
+    function finalize(Hasher memory self) public pure returns (bytes memory) {
         bytes memory output = new bytes(32);
-        finalize_internal(self, output);
+
+        _finalize_internal(self, output);
         return output;
     }
 
-    function finalize_internal(Hasher memory self, bytes memory out_slice)
-    private {
+    function _finalize_internal(
+        Hasher memory self, bytes memory out_slice
+    ) private pure {
         // Starting with the Output from the current chunk, compute all the
         // parent chaining values along the right edge of the tree, until we
         // have the root Output.
-        Output memory output = output(self.chunk_state);
+        Output memory output = _output(self.chunk_state);
         uint32 parent_nodes_remaining = self.cv_stack_len;
         while (parent_nodes_remaining > 0) {
             parent_nodes_remaining -= 1;
-            output = parent_output(
+            output = _parent_output(
                 self.cv_stack[parent_nodes_remaining],
-                chaining_value(output),
+                _chaining_value(output),
                 self.key_words,
                 self.flags
             );
         }
-        root_output_bytes(output, out_slice);
+        _root_output_bytes(output, out_slice);
     }
 }
