@@ -453,13 +453,13 @@ library Blake3Sol {
     }
 
     /// Construct a new `Hasher` for the regular hash function.
-    function new_hasher() public pure returns (Hasher memory) {
+    function new_hasher() internal pure returns (Hasher memory) {
         uint32[8] memory IV = _IV();
         return _new_hasher_internal(IV, 0);
     }
 
     /// Construct a new `Hasher` for the keyed hash function.
-    function new_keyed(bytes calldata key) public pure returns (Hasher memory) {
+    function new_keyed(bytes calldata key) internal pure returns (Hasher memory) {
         uint32[8] memory key_words;
         bytes memory key_mem = key;
         _words_from_little_endian_bytes8(key_mem, key_words);
@@ -468,7 +468,7 @@ library Blake3Sol {
 
     // Construct a new `Hasher` for the key derivation function. The context
     // string should be hardcoded, globally unique, and application-specific
-    function new_derive_key(bytes calldata context) public pure returns (Hasher memory) {
+    function new_derive_key(bytes calldata context) internal pure returns (Hasher memory) {
         uint32[8] memory IV = _IV();
         Hasher memory context_hasher = _new_hasher_internal(IV, DERIVE_KEY_CONTEXT);
         update_hasher(context_hasher, context);
@@ -508,7 +508,7 @@ library Blake3Sol {
     // Add input to the hash state. This can be called any number of times.
     function update_hasher(
         Hasher memory self, bytes calldata input
-    ) public pure returns (Hasher memory) {
+    ) internal pure returns (Hasher memory) {
         uint32 input_offset = 0;
 
         while (input_offset < input.length) {
@@ -535,7 +535,7 @@ library Blake3Sol {
         return self;
     }
 
-    function finalize(Hasher memory self) public pure returns (bytes memory) {
+    function finalize(Hasher memory self) internal pure returns (bytes memory) {
         bytes memory output = new bytes(32);
 
         _finalize_internal(self, output);
