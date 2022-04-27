@@ -22,18 +22,6 @@ jobs:
       - name: Install Wget
         run: sudo apt install -y wget
 
-      - name: Download Cast
-        run: wget -q https://github.com/themeliolabs/artifacts/raw/master/cast.tar.gz
-
-      - name: Extract Cast
-        run: tar -xf cast.tar.gz
-
-      - name: Remove Cast Archive
-        run: rm cast.tar.gz
-
-      - name: Move Cast To A PATH Directory
-        run: sudo mv cast /usr/local/bin/cast
-
       - name: Download Forge
         run: wget -q https://github.com/themeliolabs/artifacts/raw/master/forge.tar.gz
 

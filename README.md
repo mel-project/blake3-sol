@@ -33,21 +33,10 @@ $ forge build
 
 ## Debugging
 
-We have the option of logging via two frameworks: [hardhat](https://github.com/nomiclabs/hardhat) and [ds-test](https://github.com/dapphub/ds-test)
-
-To log with `hardhat`, add this line to the top of your solidity file:
-```
-import "hardhat-core/console.sol";
-```
-
-Then you can print out debugging information like this:
-```
-console.log("Example print");
-```
 
 To log with `ds-test`, add this line to the top of your solidity file:
 ```
-import "ds-test/test.sol";
+import "forge-std/Test.sol";
 ```
 
 Then you can print out debugging information like this:
@@ -60,5 +49,5 @@ emit log("Other example print");
 
 Run:
 ```
-$ env RUST_LOG=forge=trace forge test --verbosity 3
+$ env RUST_LOG=forge=trace forge test -vvv
 ```
