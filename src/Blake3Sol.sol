@@ -329,7 +329,7 @@ library Blake3Sol {
     // Returns a new input offset
     function _update_chunkstate(
         ChunkState memory chunk,
-        bytes calldata input
+        bytes memory input
     ) private pure {//returns (uint32) {
         uint32 input_offset = 0;
         while (input_offset < input.length) {
@@ -368,7 +368,7 @@ library Blake3Sol {
             assembly {
                 let block_addr := add(add(block_ref, 0x20), blen)
                 let input_addr := add(add(input.offset, 0x20), input_offset)
-                calldatacopy(block_addr, input_addr, take)
+                memorycopy(block_addr, input_addr, take)
             }
             */
 
@@ -459,7 +459,7 @@ library Blake3Sol {
     }
 
     /// Construct a new `Hasher` for the keyed hash function.
-    function new_keyed(bytes calldata key) internal pure returns (Hasher memory) {
+    function new_keyed(bytes memory key) internal pure returns (Hasher memory) {
         uint32[8] memory key_words;
         bytes memory key_mem = key;
         _words_from_little_endian_bytes8(key_mem, key_words);
@@ -468,7 +468,7 @@ library Blake3Sol {
 
     // Construct a new `Hasher` for the key derivation function. The context
     // string should be hardcoded, globally unique, and application-specific
-    function new_derive_key(bytes calldata context) internal pure returns (Hasher memory) {
+    function new_derive_key(bytes memory context) internal pure returns (Hasher memory) {
         uint32[8] memory IV = _IV();
         Hasher memory context_hasher = _new_hasher_internal(IV, DERIVE_KEY_CONTEXT);
         update_hasher(context_hasher, context);
@@ -505,9 +505,23 @@ library Blake3Sol {
         _push_stack(self, new_cv);
     }
 
+    function _slice(
+        bytes memory data,
+        uint256 start,
+        uint256 end
+    ) private pure returns (bytes memory) {
+        bytes memory dataSlice = new bytes(end - start);
+
+        for (uint256 i = 0; i < end; i++) {
+            dataSlice[i] = data[start + i];
+        }
+
+        return dataSlice;
+    }
+
     // Add input to the hash state. This can be called any number of times.
     function update_hasher(
-        Hasher memory self, bytes calldata input
+        Hasher memory self, bytes memory input
     ) internal pure returns (Hasher memory) {
         uint32 input_offset = 0;
 
@@ -526,7 +540,7 @@ library Blake3Sol {
             uint32 take = _min(want, uint32(input.length - input_offset));
 
             // Update chunk state
-            bytes calldata input_slice = input[input_offset:take+input_offset];
+            bytes memory input_slice = _slice(input, input_offset, take + input_offset);
             _update_chunkstate(self.chunk_state, input_slice);
 
             input_offset += take;

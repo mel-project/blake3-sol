@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.6;
 
-import "ds-test/test.sol";
+import "forge-std/Test.sol";
 import "../Blake3Sol.sol";
 
-contract Blake3SolTest is DSTest {
+contract Blake3SolTest is Test {
     using Blake3Sol for Blake3Sol.Hasher;
 
     function test_hash() public {
