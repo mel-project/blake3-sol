@@ -4,7 +4,7 @@ pragma solidity ^0.8.6;
 library Blake3Sol {
     //type State is uint32[16];
     //type usize is uint32;
-    uint8 constant BLOCK_LEN = 64;
+    uint256 constant BLOCK_LEN = 64;
     uint32 constant OUT_LEN = 32;
     uint32 constant CHUNK_LEN = 1024;
 
@@ -22,7 +22,7 @@ library Blake3Sol {
         uint32[8] input_chaining_value;
         uint32[16] block_words;
         uint64 counter;
-        uint32 block_len;
+        uint256 block_len;
         uint32 flags;
     }
 
@@ -31,8 +31,8 @@ library Blake3Sol {
         uint64 chunk_counter;
         // Has a max size of BLOCK_LEN
         bytes block_bytes;
-        uint32 block_len;
-        uint8 blocks_compressed;
+        uint256 block_len;
+        uint256 blocks_compressed;
         uint32 flags;
     }
 
@@ -67,7 +67,7 @@ library Blake3Sol {
         uint32 d,
         uint32 mx,
         uint32 my
-    ) private pure {
+    ) internal pure {
         unchecked {
             state[a] = state[a] + state[b] + mx;
             state[d] = _rotr(state[d] ^ state[a], 16);
@@ -80,7 +80,7 @@ library Blake3Sol {
         }
     }
 
-    function _round(uint32[16] memory state, uint32[16] memory m) private pure {
+    function _round(uint32[16] memory state, uint32[16] memory m) internal pure {
         // Mix the columns.
         _g(state, 0, 4, 8, 12, m[0], m[1]);
         _g(state, 1, 5, 9, 13, m[2], m[3]);
@@ -94,7 +94,7 @@ library Blake3Sol {
         _g(state, 3, 4, 9, 14, m[14], m[15]);
     }
 
-    function _permute(uint32[16] memory m) private pure {
+    function _permute(uint32[16] memory m) internal pure {
         uint8[16] memory MSG_PERMUTATION = _MSG_PERMUTATION();
         uint32[16] memory permuted;
 
@@ -111,9 +111,9 @@ library Blake3Sol {
         uint32[8] memory chaining_value,
         uint32[16] memory block_words_ref,
         uint64 counter,
-        uint32 block_len,
-        uint32 flags) private pure returns (uint32[16] memory
-    ) {
+        uint256 block_len,
+        uint32 flags
+    ) internal pure returns (uint32[16] memory) {
         uint32[8] memory IV = _IV();
         uint32[16] memory block_words;
         for (uint256 i = 0; i < 16; ++i) {
@@ -135,9 +135,11 @@ library Blake3Sol {
             IV[3],
             uint32(counter),
             uint32(counter >> 32),
-            block_len,
+            ///////////////////////////////
+            uint32(block_len),
             flags
         ];
+
 
         _round(state, block_words); // round 1
         _permute(block_words);
@@ -161,12 +163,12 @@ library Blake3Sol {
         return state;
     }
 
-    function _rotr(uint32 x, uint8 n) private pure returns (uint32) {
+    function _rotr(uint32 x, uint8 n) internal pure returns (uint32) {
         bytes4 b = bytes4(x);
         return uint32((b >> n) | (b << (32 - n)));
     }
 
-    function _chaining_value(Output memory o) private pure returns (uint32[8] memory) {
+    function _chaining_value(Output memory o) internal pure returns (uint32[8] memory) {
         uint32[16] memory compression_output = _compress(
             o.input_chaining_value,
             o.block_words,
@@ -181,7 +183,7 @@ library Blake3Sol {
     function _root_output_bytes(
         Output memory self,
         bytes memory out_slice
-    ) private pure {
+    ) internal pure {
         //uint32 output_block_counter = 0;
         // Take 64-byte chunks at a time from out_slice
         //for (uint32 i = 0; i < out_slice.length; i += 2 * OUT_LEN) {
@@ -211,13 +213,13 @@ library Blake3Sol {
         uint32 n,
         bytes memory buf,
         uint32 offset
-    ) private pure {
+    ) internal pure {
         for (uint256 i = 0; i < 4; ++i) {
             buf[offset+i] = bytes1(uint8(n / (2 ** (i*8))));
         }
     }
 
-    function _uint32_to_le_bytes(uint32 n) private pure returns (bytes4) {
+    function _uint32_to_le_bytes(uint32 n) internal pure returns (bytes4) {
         bytes4 buf;
         for (uint256 i = 0; i < 4; ++i) {
             assembly {
@@ -232,7 +234,7 @@ library Blake3Sol {
     }
 
 
-    function _le_bytes_get_uint32(bytes memory _bytes, uint256 _start) internal pure returns (uint32) {
+    function _le_bytes_get_uint32(bytes memory _bytes, uint256 _start) public pure returns (uint32) {
         require(_bytes.length >= _start + 4, "le_bytes_get_uint32_outOfBounds");
         uint32 tempUint;
 
@@ -259,7 +261,7 @@ library Blake3Sol {
     function _words_from_little_endian_bytes8(
         bytes memory data_bytes,
         uint32[8] memory words
-    ) private pure {
+    ) internal pure {
         require(data_bytes.length <= 4*8,
                 "Data bytes is too long to convert to 8 4-byte words");
 
@@ -271,7 +273,7 @@ library Blake3Sol {
     function _words_from_little_endian_bytes(
         bytes memory data_bytes,
         uint32[16] memory words
-    ) private pure {
+    ) internal pure {
         require(data_bytes.length <= 64 && data_bytes.length%4 == 0,
                 "Data bytes is too long to convert to 16 4-byte words");
 
@@ -282,7 +284,7 @@ library Blake3Sol {
 
 
     // TODO I wish this didn't require a copy to convert array sizes
-    function _first_8_words(uint32[16] memory words) private pure returns (uint32[8] memory) {
+    function _first_8_words(uint32[16] memory words) internal pure returns (uint32[8] memory) {
         // TODO there must be a way to do this without copying
         // How to take a slice of a memory array?
         uint32[8] memory first_8;
@@ -302,7 +304,7 @@ library Blake3Sol {
         uint32[8] memory key_words,
         uint64 chunk_counter,
         uint32 flags
-    ) private pure returns (ChunkState memory) {
+    ) internal pure returns (ChunkState memory) {
         bytes memory block_bytes = new bytes(BLOCK_LEN);
         return ChunkState({
             chaining_value: key_words,
@@ -314,11 +316,11 @@ library Blake3Sol {
         });
     }
 
-    function _len(ChunkState memory chunk) private pure returns (uint32) {
+    function _len(ChunkState memory chunk) internal pure returns (uint256) {
         return BLOCK_LEN * chunk.blocks_compressed + chunk.block_len;
     }
 
-    function _start_flag(ChunkState memory chunk) private pure returns (uint32) {
+    function _start_flag(ChunkState memory chunk) internal pure returns (uint32) {
         if (chunk.blocks_compressed == 0) {
             return CHUNK_START;
         } else {
@@ -330,8 +332,8 @@ library Blake3Sol {
     function _update_chunkstate(
         ChunkState memory chunk,
         bytes memory input
-    ) private pure {//returns (uint32) {
-        uint32 input_offset = 0;
+    ) internal pure {//returns (uint32) {
+        uint256 input_offset = 0;
         while (input_offset < input.length) {
             // If the block buffer is full, compress it and clear it. More
             // input is coming, so this compression is not CHUNK_END.
@@ -352,9 +354,8 @@ library Blake3Sol {
             }
 
             // Take enough to fill a block [min(want, input.length)]
-            uint32 want = BLOCK_LEN - chunk.block_len;
-            // TODO be more careful with this downcast
-            uint32 take = _min(want, uint32(input.length - input_offset));
+            uint256 want = BLOCK_LEN - chunk.block_len;
+            uint256 take = _min(want, input.length - input_offset);
 
             // Copy bytes from input to chunk block
             //chunk.block_bytes[self.block_len as usize..][..take].copy_from_slice(&input[..take]);
@@ -377,7 +378,7 @@ library Blake3Sol {
         }
     }
 
-    function _min(uint32 x, uint32 y) private pure returns (uint32) {
+    function _min(uint256 x, uint256 y) internal pure returns (uint256) {
         if (x < y) {
             return x;
         } else {
@@ -385,7 +386,7 @@ library Blake3Sol {
         }
     }
 
-    function _output(ChunkState memory chunk) private pure returns (Output memory) {
+    function _output(ChunkState memory chunk) internal pure returns (Output memory) {
         uint32[16] memory block_words;
         _words_from_little_endian_bytes(chunk.block_bytes, block_words);
 
@@ -407,13 +408,15 @@ library Blake3Sol {
         uint32[8] memory right_child_cv,
         uint32[8] memory key_words,
         uint32 flags
-    ) private pure returns (Output memory) {
+    ) internal pure returns (Output memory) {
         uint32[16] memory block_words;
+
         for (uint256 i = 0; i < 8; ++i) {
             block_words[i] = left_child_cv[i];
         }
+
         for (uint256 i = 8; i < 16; ++i) {
-            block_words[i] = right_child_cv[i];
+            block_words[i] = right_child_cv[i - 8];
         }
 
         return Output({
@@ -430,7 +433,7 @@ library Blake3Sol {
         uint32[8] memory right_child_cv,
         uint32[8] memory key_words,
         uint32 flags
-    ) private pure returns (uint32[8] memory) {
+    ) internal pure returns (uint32[8] memory) {
         return _chaining_value(_parent_output(left_child_cv, right_child_cv, key_words, flags));
     }
 
@@ -441,7 +444,7 @@ library Blake3Sol {
 
     function _new_hasher_internal(
         uint32[8] memory key_words, uint32 flags
-    ) private pure returns (Hasher memory) {
+    ) internal pure returns (Hasher memory) {
         uint32[8][54] memory cv_stack;
         return Hasher({
             chunk_state: _new_chunkstate(key_words, 0, flags),
@@ -453,13 +456,13 @@ library Blake3Sol {
     }
 
     /// Construct a new `Hasher` for the regular hash function.
-    function new_hasher() internal pure returns (Hasher memory) {
+    function new_hasher() public pure returns (Hasher memory) {
         uint32[8] memory IV = _IV();
         return _new_hasher_internal(IV, 0);
     }
 
     /// Construct a new `Hasher` for the keyed hash function.
-    function new_keyed(bytes memory key) internal pure returns (Hasher memory) {
+    function new_keyed(bytes memory key) public pure returns (Hasher memory) {
         uint32[8] memory key_words;
         bytes memory key_mem = key;
         _words_from_little_endian_bytes8(key_mem, key_words);
@@ -468,7 +471,7 @@ library Blake3Sol {
 
     // Construct a new `Hasher` for the key derivation function. The context
     // string should be hardcoded, globally unique, and application-specific
-    function new_derive_key(bytes memory context) internal pure returns (Hasher memory) {
+    function new_derive_key(bytes memory context) public pure returns (Hasher memory) {
         uint32[8] memory IV = _IV();
         Hasher memory context_hasher = _new_hasher_internal(IV, DERIVE_KEY_CONTEXT);
         update_hasher(context_hasher, context);
@@ -482,12 +485,12 @@ library Blake3Sol {
         return _new_hasher_internal(context_key_words, DERIVE_KEY_MATERIAL);
     }
 
-    function _push_stack(Hasher memory self, uint32[8] memory cv) private pure {
+    function _push_stack(Hasher memory self, uint32[8] memory cv) internal pure {
         self.cv_stack[self.cv_stack_len] = cv;
         self.cv_stack_len += 1;
     }
 
-    function _pop_stack(Hasher memory self) private pure returns (uint32[8] memory) {
+    function _pop_stack(Hasher memory self) internal pure returns (uint32[8] memory) {
         self.cv_stack_len -= 1;
         return self.cv_stack[self.cv_stack_len];
     }
@@ -496,7 +499,7 @@ library Blake3Sol {
         Hasher memory self,
         uint32[8] memory new_cv,
         uint64 total_chunks
-    ) private pure {
+    ) internal pure {
         while (total_chunks & 1 == 0) {
             new_cv = _parent_cv(_pop_stack(self), new_cv, self.key_words, self.flags);
             total_chunks >>= 1;
@@ -509,10 +512,11 @@ library Blake3Sol {
         bytes memory data,
         uint256 start,
         uint256 end
-    ) private pure returns (bytes memory) {
-        bytes memory dataSlice = new bytes(end - start);
+    ) internal pure returns (bytes memory) {
+        uint256 dataSliceLength = end - start;
+        bytes memory dataSlice = new bytes(dataSliceLength);
 
-        for (uint256 i = 0; i < end; ++i) {
+        for (uint256 i = 0; i < dataSliceLength; ++i) {
             dataSlice[i] = data[start + i];
         }
 
@@ -522,22 +526,24 @@ library Blake3Sol {
     // Add input to the hash state. This can be called any number of times.
     function update_hasher(
         Hasher memory self, bytes memory input
-    ) internal pure returns (Hasher memory) {
-        uint32 input_offset = 0;
+    ) public pure returns (Hasher memory) {
+        uint256 input_offset = 0;
 
         while (input_offset < input.length) {
             // If the current chunk is complete, finalize it and reset the
             // chunk state. More input is coming, so this chunk is not ROOT.
-            if (_len(self.chunk_state) == CHUNK_LEN) {
+                if (_len(self.chunk_state) == CHUNK_LEN) {
                 uint32[8] memory chunk_cv = _chaining_value(_output(self.chunk_state));
                 uint64 total_chunks = self.chunk_state.chunk_counter + 1;
+
                 _add_chunk_chaining_value(self, chunk_cv, total_chunks);
+
                 self.chunk_state = _new_chunkstate(self.key_words, total_chunks, self.flags);
             }
 
             // Compress input bytes into the current chunk state.
-            uint32 want = CHUNK_LEN - _len(self.chunk_state);
-            uint32 take = _min(want, uint32(input.length - input_offset));
+            uint256 want = CHUNK_LEN - _len(self.chunk_state);
+            uint256 take = _min(want, uint32(input.length - input_offset));
 
             // Update chunk state
             bytes memory input_slice = _slice(input, input_offset, take + input_offset);
@@ -549,23 +555,26 @@ library Blake3Sol {
         return self;
     }
 
-    function finalize(Hasher memory self) internal pure returns (bytes memory) {
+    function finalize(Hasher memory self) public pure returns (bytes memory) {
         bytes memory output = new bytes(32);
 
         _finalize_internal(self, output);
+
         return output;
     }
 
     function _finalize_internal(
         Hasher memory self, bytes memory out_slice
-    ) private pure {
+    ) internal pure {
         // Starting with the Output from the current chunk, compute all the
         // parent chaining values along the right edge of the tree, until we
         // have the root Output.
         Output memory output = _output(self.chunk_state);
         uint32 parent_nodes_remaining = self.cv_stack_len;
+
         while (parent_nodes_remaining > 0) {
             parent_nodes_remaining -= 1;
+
             output = _parent_output(
                 self.cv_stack[parent_nodes_remaining],
                 _chaining_value(output),
