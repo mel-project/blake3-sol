@@ -98,11 +98,11 @@ library Blake3Sol {
         uint8[16] memory MSG_PERMUTATION = _MSG_PERMUTATION();
         uint32[16] memory permuted;
 
-        for (uint8 i = 0; i < 16; i++) {
+        for (uint256 i = 0; i < 16; ++i) {
             permuted[i] = m[MSG_PERMUTATION[i]];
         }
 
-        for (uint8 i = 0; i < 16; i++) {
+        for (uint256 i = 0; i < 16; ++i) {
             m[i] = permuted[i];
         }
     }
@@ -116,7 +116,7 @@ library Blake3Sol {
     ) {
         uint32[8] memory IV = _IV();
         uint32[16] memory block_words;
-        for (uint8 i = 0; i < 16; i++) {
+        for (uint256 i = 0; i < 16; ++i) {
             block_words[i] = block_words_ref[i];
         }
 
@@ -153,7 +153,7 @@ library Blake3Sol {
         _permute(block_words);
         _round(state, block_words); // round 7
 
-        for (uint8 i = 0; i < 8; i++) {
+        for (uint256 i = 0; i < 8; ++i) {
             state[i] ^= state[i + 8];
             state[i + 8] ^= chaining_value[i];
         }
@@ -212,14 +212,14 @@ library Blake3Sol {
         bytes memory buf,
         uint32 offset
     ) private pure {
-        for (uint8 i = 0; i < 4; i++) {
+        for (uint256 i = 0; i < 4; ++i) {
             buf[offset+i] = bytes1(uint8(n / (2 ** (i*8))));
         }
     }
 
     function _uint32_to_le_bytes(uint32 n) private pure returns (bytes4) {
         bytes4 buf;
-        for (int i = 0; i < 4; i++) {
+        for (uint256 i = 0; i < 4; ++i) {
             assembly {
                 let cc := add(buf, 0x20)
                 let buf_idx := add(cc, sub(3, i))
@@ -236,7 +236,7 @@ library Blake3Sol {
         require(_bytes.length >= _start + 4, "le_bytes_get_uint32_outOfBounds");
         uint32 tempUint;
 
-        for (uint8 i = 0; i < 4; i++) {
+        for (uint256 i = 0; i < 4; ++i) {
             //tempUint += uint32(uint8(_bytes[i]) * (2 ** (8*i)));
             tempUint += uint32(bytes4(_bytes[3-i+_start]) >> (8 * i));
         }
@@ -263,7 +263,7 @@ library Blake3Sol {
         require(data_bytes.length <= 4*8,
                 "Data bytes is too long to convert to 8 4-byte words");
 
-        for (uint8 i = 0; i < data_bytes.length/4; i++) {
+        for (uint256 i = 0; i < data_bytes.length/4; ++i) {
             words[i] = _le_bytes_get_uint32(data_bytes, i*4);
         }
     }
@@ -275,7 +275,7 @@ library Blake3Sol {
         require(data_bytes.length <= 64 && data_bytes.length%4 == 0,
                 "Data bytes is too long to convert to 16 4-byte words");
 
-        for (uint8 i = 0; i < data_bytes.length/4; i++) {
+        for (uint256 i = 0; i < data_bytes.length/4; ++i) {
             words[i] = _le_bytes_get_uint32(data_bytes, i*4);
         }
     }
@@ -286,7 +286,7 @@ library Blake3Sol {
         // TODO there must be a way to do this without copying
         // How to take a slice of a memory array?
         uint32[8] memory first_8;
-        for (uint8 i = 0; i < 8; i++) {
+        for (uint256 i = 0; i < 8; ++i) {
             first_8[i] = words[i];
         }
 
@@ -358,7 +358,7 @@ library Blake3Sol {
 
             // Copy bytes from input to chunk block
             //chunk.block_bytes[self.block_len as usize..][..take].copy_from_slice(&input[..take]);
-            for (uint32 i = 0; i < take; i++) {
+            for (uint256 i = 0; i < take; ++i) {
                 // TODO recheck this logic
                 chunk.block_bytes[i+chunk.block_len] = input[input_offset+i];
             }
@@ -409,10 +409,10 @@ library Blake3Sol {
         uint32 flags
     ) private pure returns (Output memory) {
         uint32[16] memory block_words;
-        for (uint8 i = 0; i < 8; i++) {
+        for (uint256 i = 0; i < 8; ++i) {
             block_words[i] = left_child_cv[i];
         }
-        for (uint8 i = 8; i < 16; i++) {
+        for (uint256 i = 8; i < 16; ++i) {
             block_words[i] = right_child_cv[i];
         }
 
@@ -512,7 +512,7 @@ library Blake3Sol {
     ) private pure returns (bytes memory) {
         bytes memory dataSlice = new bytes(end - start);
 
-        for (uint256 i = 0; i < end; i++) {
+        for (uint256 i = 0; i < end; ++i) {
             dataSlice[i] = data[start + i];
         }
 

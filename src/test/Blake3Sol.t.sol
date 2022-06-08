@@ -30,4 +30,23 @@ contract Blake3SolTest is Test {
             0x0edd7e645d2bc1bba1f323f6339a3d0448ec6b675991e8dc76d2396eb0dffca2
         );
     }
+
+    function test_big_hash_ffi() public {
+        string[] memory cmds = new string[](2);
+        cmds[0] = '../bridge-differential-tests/target/debug/bridge_differential_tests';
+        cmds[1] = '--big-hash';
+
+        bytes memory packedData = vm.ffi(cmds);
+        (bytes memory data, bytes32 dataHash) = abi.decode(packedData, (bytes, bytes32));
+        // emit log_bytes(data);
+        // emit log_bytes32(dataHash);
+
+        //assertEq(bigHash, 0x9898cb898a989d989);
+        Blake3Sol.Hasher memory hasher = Blake3Sol.new_hasher();
+emit log('wulf');
+        hasher = hasher.update_hasher(data);
+emit log('hailey');
+        bytes memory bigHash = hasher.finalize();
+emit log_bytes(bigHash);
+    }
 }
