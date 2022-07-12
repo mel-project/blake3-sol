@@ -5,7 +5,7 @@ library Blake3Sol {
     //type State is uint32[16];
     //type usize is uint32;
     uint256 constant BLOCK_LEN = 64;
-    uint32 constant OUT_LEN = 32;
+    //uint32 constant OUT_LEN = 32;
     uint32 constant CHUNK_LEN = 1024;
 
     // Flag constants
@@ -234,7 +234,7 @@ library Blake3Sol {
     }
 
 
-    function _le_bytes_get_uint32(bytes memory _bytes, uint256 _start) public pure returns (uint32) {
+    function _le_bytes_get_uint32(bytes memory _bytes, uint256 _start) internal pure returns (uint32) {
         require(_bytes.length >= _start + 4, "le_bytes_get_uint32_outOfBounds");
         uint32 tempUint;
 
@@ -456,13 +456,13 @@ library Blake3Sol {
     }
 
     /// Construct a new `Hasher` for the regular hash function.
-    function new_hasher() public pure returns (Hasher memory) {
+    function new_hasher() external pure returns (Hasher memory) {
         uint32[8] memory IV = _IV();
         return _new_hasher_internal(IV, 0);
     }
 
     /// Construct a new `Hasher` for the keyed hash function.
-    function new_keyed(bytes memory key) public pure returns (Hasher memory) {
+    function new_keyed(bytes calldata key) external pure returns (Hasher memory) {
         uint32[8] memory key_words;
         bytes memory key_mem = key;
         _words_from_little_endian_bytes8(key_mem, key_words);
@@ -471,7 +471,7 @@ library Blake3Sol {
 
     // Construct a new `Hasher` for the key derivation function. The context
     // string should be hardcoded, globally unique, and application-specific
-    function new_derive_key(bytes memory context) public pure returns (Hasher memory) {
+    function new_derive_key(bytes calldata context) external pure returns (Hasher memory) {
         uint32[8] memory IV = _IV();
         Hasher memory context_hasher = _new_hasher_internal(IV, DERIVE_KEY_CONTEXT);
         update_hasher(context_hasher, context);
@@ -555,7 +555,7 @@ library Blake3Sol {
         return self;
     }
 
-    function finalize(Hasher memory self) public pure returns (bytes memory) {
+    function finalize(Hasher calldata self) external pure returns (bytes memory) {
         bytes memory output = new bytes(32);
 
         _finalize_internal(self, output);
